@@ -56,15 +56,18 @@
 
         .icon-img {
             display: inline-block;
-            width: 28px;
-            height: 28px;
+            width: auto;         
+            height: 40px;        
             object-fit: contain;
             vertical-align: middle;
         }
 
         .logo-icon {
-            width: 36px;
-            height: 36px;
+            width: auto;
+            max-height: 64px;  
+            height: auto;
+            object-fit: contain;
+            display: block;
         }
 
         .btn-icon {

@@ -16,7 +16,6 @@
             <div id="registerAlert" class="alert" role="alert" aria-live="polite"></div>
 
             <form id="registerForm" novalidate>
-                <!-- Chọn vai trò -->
                 <section class="role-selection">
                     <h3>Chọn vai trò của bạn</h3>
                     <div class="role-grid" role="list">
@@ -39,7 +38,6 @@
                     <input type="hidden" id="userRole" name="role" required>
                 </section>
 
-                <!-- Thông tin cá nhân -->
                 <section class="personal-info">
                     <div class="form-row">
                         <div class="form-group">
@@ -95,17 +93,14 @@
                     </div>
                 </section>
 
-                <!-- Địa chỉ -->
                 <section class="address-info">
                     <div class="form-row">
                         <div class="form-group">
                             <label for="province">Tỉnh/Thành phố <span class="required">*</span></label>
                             <select id="province" class="form-control" required>
                                 <option value="">Chọn Tỉnh/Thành phố</option>
-                                <!-- options kept from original file -->
                                 <option value="Hà Nội">Hà Nội</option>
                                 <option value="TP. Hồ Chí Minh">TP. Hồ Chí Minh</option>
-                                <!-- ...add others as needed... -->
                             </select>
                         </div>
                         <div class="form-group">
@@ -120,7 +115,6 @@
                     </div>
                 </section>
 
-                <!-- Trường theo vai trò (ẩn/hiện bằng JS) -->
                 <section id="farmerFields" class="role-specific-fields">
                     <h4>Thông tin trang trại</h4>
                     <div class="form-group">
