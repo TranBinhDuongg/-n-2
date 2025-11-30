@@ -1,98 +1,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Nông dân - Quản lý Nông sản</title>
+    <title>Dashboard Nông dân - 4 Chức năng chính</title>
     <link rel="stylesheet" href="Nongdan.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="Nongdan.js" defer></script>
 </head>
 <body>
     <aside class="sidebar">
         <div class="sidebar-header">
             <a href="#" class="logo">
-                <i class="fas fa-seedling"></i>
+                <i class="fas fa-leaf"></i>
                 <span>AgriChain</span>
             </a>
         </div>
-
-        <div class="user-profile">
-            <div class="user-avatar">NA</div>
-            <div class="user-info">
-                <h4>Nguyễn Văn A</h4>
-                <p>Nông dân</p>
-            </div>
-        </div>
         <ul class="sidebar-menu">
-            <li class="menu-item">
-                <a href="#" class="menu-link active" data-section="dashboard">
-                    <i class="fas fa-home"></i>
-                    <span>Trang chủ</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="farms">
-                    <i class="fas fa-tractor"></i>
-                    <span>Trang trại</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="batches">
-                    <i class="fas fa-box"></i>
-                    <span>Quản lý lô</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="shipments">
-                    <i class="fas fa-truck"></i>
-                    <span>Vận chuyển</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="warehouses">
-                    <i class="fas fa-warehouse"></i>
-                    <span>Kho trung gian</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="inspections">
-                    <i class="fas fa-clipboard-check"></i>
-                    <span>Kiểm định</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="reports">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Báo cáo</span>
-                </a>
-            </li>
-
-            <div class="menu-divider"></div>
-
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="qrcode">
-                    <i class="fas fa-qrcode"></i>
-                    <span>Mẫu tem QR</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="audit">
-                    <i class="fas fa-file-alt"></i>
-                    <span>Audit log</span>
-                </a>
-            </li>
-            <li class="menu-item">
-                <a href="#" class="menu-link" data-section="alerts">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <span>Cảnh báo</span>
-                </a>
-            </li>
-
-            <div class="menu-divider"></div>
-
-            <li class="menu-item">
-                <a href="/Dangnhap/Dangnhap.html" class="menu-link">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span>Đăng xuất</span>
-                </a>
+            <li><a href="#" class="menu-link active" data-section="dashboard"><i class="fas fa-home"></i> <span>Trang chủ</span></a></li>
+            <li><a href="#" class="menu-link" data-section="farms"><i class="fas fa-tractor"></i> <span>Quản lý trang trại</span></a></li>
+            <li><a href="#" class="menu-link" data-section="batches"><i class="fas fa-box"></i> <span>Quản lý lô sản phẩm</span></a></li>
+            <li><a href="#" class="menu-link" data-section="shipments"><i class="fas fa-truck"></i> <span>Quản lý xuất hàng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="reports"><i class="fas fa-chart-bar"></i> <span>Báo cáo thống kê</span></a></li>
+            <li style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:10px;">
+                <a href="/Dangnhap/Dangnhap.html" class="menu-link"><i class="fas fa-sign-out-alt"></i> <span>Đăng xuất</span></a>
             </li>
         </ul>
     </aside>
@@ -104,7 +32,7 @@
                 <h2>Bảng điều khiển</h2>
                 <div class="header-actions">
                     <button id="btn-new-batch" class="btn">+ Đăng ký lô mới</button>
-                    <button id="btn-new-shipment" class="btn">+ Tạo vận chuyển</button>
+                    <button id="btn-new-shipment" class="btn">+ Xuất hàng</button>
                 </div>
             </div>
 
@@ -115,11 +43,11 @@
                 </div>
                 <div class="kpi">
                     <h3 id="kpi-batches">0</h3>
-                    <p>Tổng lô</p>
+                    <p>Lô sản phẩm</p>
                 </div>
                 <div class="kpi">
-                    <h3 id="kpi-inspections">0</h3>
-                    <p>Kiểm định</p>
+                    <h3 id="kpi-shipments">0</h3>
+                    <p>Phiếu xuất</p>
                 </div>
                 <div class="kpi">
                     <h3 id="kpi-alerts">0</h3>
@@ -129,16 +57,16 @@
 
             <div class="lists">
                 <div class="list">
-                    <h4>Các lô gần tới hạn</h4>
+                    <h4>Cảnh báo hạn dùng</h4>
                     <table id="table-alerts" class="table">
-                        <thead><tr><th>ID</th><th>Sản phẩm</th><th>Hạn dùng</th><th>Trạng thái</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Sản phẩm</th><th>Hạn dùng</th><th>Khoảng cách</th><th>Mức độ</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
                 <div class="list">
-                    <h4>Vận chuyển đang chạy</h4>
+                    <h4>Phiếu xuất gần đây</h4>
                     <table id="table-shipments" class="table">
-                        <thead><tr><th>ID</th><th>From</th><th>To</th><th>Trạng thái</th></tr></thead>
+                        <thead><tr><th>ID</th><th>Lô</th><th>SL</th><th>Địa chỉ</th><th>Ngày</th><th>Trạng thái</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -148,10 +76,9 @@
         <!-- Farms -->
         <section id="farms" class="page">
             <div class="page-header">
-                <h2>Trang trại</h2>
+                <h2>Quản lý trang trại</h2>
                 <button id="btn-new-farm" class="btn">+ Thêm trang trại</button>
             </div>
-
             <table id="table-farms" class="table">
                 <thead><tr><th>ID</th><th>Tên</th><th>Địa chỉ</th><th>Chứng nhận</th><th>Hành động</th></tr></thead>
                 <tbody></tbody>
@@ -161,12 +88,11 @@
         <!-- Batches -->
         <section id="batches" class="page">
             <div class="page-header">
-                <h2>Quản lý lô nông sản</h2>
-                <button id="btn-new-batch-2" class="btn">+ Đăng ký lô mới</button>
+                <h2>Quản lý lô sản phẩm</h2>
+                <button id="btn-new-batch" class="btn">+ Đăng ký lô mới</button>
             </div>
-
             <table id="table-batches" class="table">
-                <thead><tr><th>ID</th><th>Trang trại</th><th>Sản phẩm</th><th>Số lượng</th><th>Hạn dùng</th><th>QR</th><th>Hành động</th></tr></thead>
+                <thead><tr><th>ID</th><th>Trang trại</th><th>Sản phẩm</th><th>SL</th><th>Hạn dùng</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
                 <tbody></tbody>
             </table>
         </section>
@@ -174,36 +100,11 @@
         <!-- Shipments -->
         <section id="shipments" class="page">
             <div class="page-header">
-                <h2>Vận chuyển & Kho trung gian</h2>
-                <button id="btn-new-shipment-2" class="btn">+ Tạo vận chuyển</button>
+                <h2>Quản lý xuất hàng</h2>
+                <button id="btn-new-shipment" class="btn">+ Tạo phiếu xuất</button>
             </div>
-
             <table id="table-shipments-all" class="table">
-                <thead><tr><th>ID</th><th>From</th><th>To</th><th>Ngày gửi</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </section>
-
-        <!-- Warehouses -->
-        <section id="warehouses" class="page">
-            <div class="page-header">
-                <h2>Kho trung gian</h2>
-                <button id="btn-new-warehouse" class="btn">+ Thêm kho</button>
-            </div>
-            <table id="table-warehouses" class="table">
-                <thead><tr><th>ID</th><th>Tên kho</th><th>Vị trí</th><th>Sức chứa</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </section>
-
-        <!-- Inspections -->
-        <section id="inspections" class="page">
-            <div class="page-header">
-                <h2>Kiểm định & Biên bản</h2>
-                <button id="btn-new-inspection" class="btn">+ Tạo biên bản</button>
-            </div>
-            <table id="table-inspections" class="table">
-                <thead><tr><th>ID</th><th>Lô</th><th>Kết quả</th><th>Người ký</th><th>Ngày</th><th>Chữ ký</th></tr></thead>
+                <thead><tr><th>ID</th><th>Lô</th><th>SL</th><th>Người nhận</th><th>Ngày</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
                 <tbody></tbody>
             </table>
         </section>
@@ -211,68 +112,33 @@
         <!-- Reports -->
         <section id="reports" class="page">
             <div class="page-header">
-                <h2>Báo cáo</h2>
+                <h2>Báo cáo thống kê</h2>
             </div>
             <div class="report-cards">
                 <div class="report-card">
-                    <h4>Sản lượng</h4>
+                    <i class="fas fa-harvest"></i>
+                    <h4>Tổng sản lượng</h4>
                     <div id="report-production">—</div>
                 </div>
                 <div class="report-card">
+                    <i class="fas fa-dolly"></i>
+                    <h4>Đã xuất hàng</h4>
+                    <div id="report-shipped">—</div>
+                </div>
+                <div class="report-card">
+                    <i class="fas fa-boxes"></i>
                     <h4>Tồn kho</h4>
                     <div id="report-stock">—</div>
                 </div>
             </div>
         </section>
-
-        <!-- QR Template -->
-        <section id="qrcode" class="page">
-            <div class="page-header">
-                <h2>Mẫu tem QR & Truy xuất</h2>
-            </div>
-            <div class="qr-grid">
-                <div class="qr-generator">
-                    <label for="qr-input">Nội dung QR (ID lô hoặc URL truy xuất)</label>
-                    <input id="qr-input" type="text" placeholder="e.g. BATCH-001" />
-                    <button id="btn-generate-qr" class="btn">Tạo QR</button>
-                    <div class="qr-preview"><img id="qr-img" alt="QR"></div>
-                </div>
-                <div class="qr-examples">
-                    <p>Mẫu tem khuyến nghị (SVG/PNG), mẫu dữ liệu: {"batchId":"BATCH-001","farm":"FARM-1","product":"Cà chua"}</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- Audit log -->
-        <section id="audit" class="page">
-            <div class="page-header">
-                <h2>Audit log</h2>
-            </div>
-            <table id="table-audit" class="table">
-                <thead><tr><th>Thời gian</th><th>Người</th><th>Hành động</th><th>Chi tiết</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </section>
-
-        <!-- Alerts -->
-        <section id="alerts" class="page">
-            <div class="page-header">
-                <h2>Cảnh báo lô</h2>
-            </div>
-            <table id="table-alerts-all" class="table">
-                <thead><tr><th>ID Lô</th><th>Sản phẩm</th><th>Hạn dùng</th><th>Khoảng cách</th><th>Trạng thái</th></tr></thead>
-                <tbody></tbody>
-            </table>
-        </section>
     </main>
 
-    <!-- Modals / Forms -->
+    <!-- Modal -->
     <div id="modal" class="modal hidden">
         <div class="modal-content">
             <button class="modal-close">&times;</button>
             <div id="modal-body"></div>
         </div>
     </div>
-
-    <script src="Nongdan.js"></script>
 </body>
