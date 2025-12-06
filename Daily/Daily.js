@@ -1,7 +1,339 @@
-// Tab Navigation
+// ========== LOCALSTORAGE HELPERS (Per-user isolation - Same as Nongdan.js) ==========
+let currentUser = null;
+
+function loadCurrentUser() {
+    const stored = sessionStorage.getItem('currentUser');
+    if (!stored) {
+        // redirect to login if no user session
+        window.location.href = '/Dangnhap/Dangnhap.html';
+        return null;
+    }
+    currentUser = JSON.parse(stored);
+    return currentUser;
+}
+
+function getUserStorageKey(key) {
+    if (!currentUser) return null;
+    return `user_${currentUser.id}_${key}`;
+}
+
+function loadUserData(key) {
+    const storageKey = getUserStorageKey(key);
+    if (!storageKey) return [];
+    return JSON.parse(localStorage.getItem(storageKey) || '[]');
+}
+
+function saveUserData(key, data) {
+    const storageKey = getUserStorageKey(key);
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(data));
+}
+
+// ========== DATABASE STRUCTURE ==========
+const DB = {
+    nongdan: JSON.parse(localStorage.getItem('nongdan') || '[]'),      
+    lohang: JSON.parse(localStorage.getItem('lohang') || '[]'),        
+    phieuNhap: [],  // Will be loaded per-user
+    kho: [],        // Will be loaded per-user
+    phieuXuat: [],  // Will be loaded per-user
+    kiemDinh: [],   // Will be loaded per-user
+    dailyAgencies: JSON.parse(localStorage.getItem('dailyAgencies') || '[]'), // Shared
+};
+
+function loadDB() {
+    DB.phieuNhap = loadUserData('phieuNhap');
+    DB.kho = loadUserData('kho');
+    DB.phieuXuat = loadUserData('phieuXuat');
+    DB.kiemDinh = loadUserData('kiemDinh');
+}
+
+// Clear old non-per-user data that may have been stored with old format
+function clearOldDataFormat() {
+    // Remove old keys that don't follow per-user format
+    const oldKeys = ['phieuNhap', 'kho', 'phieuXuat', 'kiemDinh'];
+    oldKeys.forEach(key => {
+        // Only clear if it looks like old shared format (not per-user)
+        const value = localStorage.getItem(key);
+        if (value && !value.startsWith('[]')) {
+            // Check if this is the old format by seeing if it doesn't match per-user pattern
+            try {
+                const parsed = JSON.parse(value);
+                if (Array.isArray(parsed)) {
+                    localStorage.removeItem(key);
+                }
+            } catch (e) {
+                // ignore parse errors
+            }
+        }
+    });
+}
+
+function saveDB() {
+    // Save per-user data with user_${id}_ prefix
+    saveUserData('phieuNhap', DB.phieuNhap);
+    saveUserData('kho', DB.kho);
+    saveUserData('phieuXuat', DB.phieuXuat);
+    saveUserData('kiemDinh', DB.kiemDinh);
+    
+    // Save shared data globally
+    localStorage.setItem('nongdan', JSON.stringify(DB.nongdan));
+    localStorage.setItem('lohang', JSON.stringify(DB.lohang));
+    localStorage.setItem('dailyAgencies', JSON.stringify(DB.dailyAgencies));
+}
+
+// Helper: Get warehouse name from code (maKho)
+function getKhoName(maKho) {
+    if (!maKho) return '';
+    const kho = DB.kho.find(k => k.maKho === maKho);
+    return kho ? kho.tenKho : maKho;
+}
+
+// Render reports (statistics) based on current DB state
+function renderReports() {
+    // ensure DOM elements exist
+    if (typeof document === 'undefined') return;
+    const elOrders = document.getElementById('report-orders');
+    const elShipped = document.getElementById('report-shipped');
+    const elStock = document.getElementById('report-stock');
+    const elQuality = document.getElementById('report-quality');
+
+    // compute totals
+    const totalProduction = (DB.lohang || []).reduce((s, b) => s + (parseFloat(b.soLuong) || 0), 0);
+    const totalReceived = (DB.phieuNhap || []).reduce((s, r) => s + (parseFloat(r.soLuong) || 0), 0);
+    const totalShipped = (DB.phieuXuat || []).reduce((s, x) => s + (parseFloat(x.soLuong) || 0), 0);
+    const inStock = totalReceived - totalShipped;
+
+    const totalChecks = (DB.kiemDinh || []).length;
+    const passed = (DB.kiemDinh || []).filter(k => (k.ketQua || '').toLowerCase() === 'đạt' || (k.ketQua || '').toLowerCase() === 'dat').length;
+    const passPercent = totalChecks ? Math.round((passed / totalChecks) * 100) : 0;
+
+    if (elOrders) elOrders.textContent = totalReceived + ' đơn vị';
+    if (elShipped) elShipped.textContent = totalShipped + ' đơn vị';
+    if (elStock) elStock.textContent = inStock + ' đơn vị';
+    if (elQuality) elQuality.textContent = `${passed}/${totalChecks} (${passPercent}%)`;
+}
+
+// Seed sample data for development/demo - only seed shared data, per-user data seeded per user
+function seedSampleData() {
+    let changed = false;
+    
+    // Initialize shared data (global, not per-user)
+    if (!Array.isArray(DB.dailyAgencies) || DB.dailyAgencies.length === 0) {
+        DB.dailyAgencies = [
+            { maDaiLy: 'DL001', tenDaiLy: 'Đại lý A', diaChi: 'Số 1, Phố Y', soDienThoai: '0243333333' },
+            { maDaiLy: 'DL002', tenDaiLy: 'Đại lý B', diaChi: 'Số 2, Phố Z', soDienThoai: '0244444444' }
+        ];
+        changed = true;
+    }
+    
+    if (!Array.isArray(DB.nongdan) || DB.nongdan.length === 0) {
+        DB.nongdan = [
+            { maNong: 'ND001', tenNong: 'Nguyễn Văn A', diaChi: 'Xã A, Huyện B', soDienThoai: '0912345678', email: 'a@example.com' },
+            { maNong: 'ND002', tenNong: 'Trần Thị B', diaChi: 'Xã C, Huyện D', soDienThoai: '0987654321', email: 'b@example.com' }
+        ];
+        changed = true;
+    }
+
+    if (!Array.isArray(DB.lohang) || DB.lohang.length === 0) {
+        DB.lohang = [
+            { maLo: 'LO1001', sanPham: 'Gạo thơm', maNong: 'ND001', soLuong: 500, ngayTao: '2025-11-01', hanDung: '2026-05-01' },
+            { maLo: 'LO1002', sanPham: 'Rau sạch', maNong: 'ND002', soLuong: 200, ngayTao: '2025-11-15', hanDung: '2025-12-15' }
+        ];
+        changed = true;
+    }
+
+    // Seed per-user data based on currentUser.id
+    if (DB.kho.length === 0) {
+        if (currentUser?.maDaiLy === 'DL001') {
+            DB.kho = [
+                { maKho: 'KHO001', tenKho: 'Kho Trung Tâm DL001', diaChi: 'Hà Nội', soDienThoai: '0241234567', maDaiLy: 'DL001' },
+                { maKho: 'KHO002', tenKho: 'Kho Nhánh DL001', diaChi: 'Hải Phòng', soDienThoai: '0241234568', maDaiLy: 'DL001' }
+            ];
+        } else if (currentUser?.maDaiLy === 'DL002') {
+            DB.kho = [
+                { maKho: 'KHO003', tenKho: 'Kho Trung Tâm DL002', diaChi: 'Hồ Chí Minh', soDienThoai: '0281234567', maDaiLy: 'DL002' }
+            ];
+        }
+        changed = true;
+    }
+
+    if (DB.phieuNhap.length === 0) {
+        if (currentUser?.maDaiLy === 'DL001') {
+            DB.phieuNhap = [
+                { maPhieu: 'PN2025001', maLo: 'LO1001', maNong: 'ND001', tenNong: 'Nguyễn Văn A', sanPham: 'Gạo thơm', soLuong: 100, khoNhap: 'KHO001', ngayNhap: '2025-11-20', ghiChu: 'Lô đầu mùa', status: 'Đã nhập' },
+                { maPhieu: 'PN2025002', maLo: 'LO1002', maNong: 'ND002', tenNong: 'Trần Thị B', sanPham: 'Rau sạch', soLuong: 50, khoNhap: 'KHO002', ngayNhap: '2025-11-25', ghiChu: 'Hàng tươi', status: 'Đã nhập' }
+            ];
+        } else if (currentUser?.maDaiLy === 'DL002') {
+            DB.phieuNhap = [
+                { maPhieu: 'PN2025003', maLo: 'LO1001', maNong: 'ND001', tenNong: 'Nguyễn Văn A', sanPham: 'Gạo thơm', soLuong: 200, khoNhap: 'KHO003', ngayNhap: '2025-11-22', ghiChu: 'Lô từ HN', status: 'Đã nhập' }
+            ];
+        }
+        changed = true;
+    }
+
+    if (DB.kiemDinh.length === 0) {
+        if (currentUser?.maDaiLy === 'DL001') {
+            DB.kiemDinh = [
+                { maKiemDinh: 'KD2025001', maLo: 'LO1001', ngayKiem: '2025-11-21', nguoiKiem: 'Kỹ thuật viên A', ketQua: 'Đạt', ghiChu: 'Đạt tiêu chuẩn' },
+                { maKiemDinh: 'KD2025002', maLo: 'LO1002', ngayKiem: '2025-11-26', nguoiKiem: 'Kỹ thuật viên B', ketQua: 'Đạt', ghiChu: 'Chất lượng tốt' }
+            ];
+        } else if (currentUser?.maDaiLy === 'DL002') {
+            DB.kiemDinh = [
+                { maKiemDinh: 'KD2025003', maLo: 'LO1001', ngayKiem: '2025-11-23', nguoiKiem: 'Kỹ thuật viên C', ketQua: 'Đạt', ghiChu: 'Hợp chuẩn' }
+            ];
+        }
+        changed = true;
+    }
+
+    if (DB.phieuXuat.length === 0) {
+        if (currentUser?.maDaiLy === 'DL001') {
+            DB.phieuXuat = [
+                { maPhieuX: 'PX2025001', maKho: 'KHO001', maNong: 'ND001', soLuong: 20, ngayXuat: '2025-11-28', ghiChu: 'Giao siêu thị' },
+                { maPhieuX: 'PX2025002', maKho: 'KHO002', maNong: 'ND002', soLuong: 30, ngayXuat: '2025-11-29', ghiChu: 'Giao khách lẻ' }
+            ];
+        } else if (currentUser?.maDaiLy === 'DL002') {
+            DB.phieuXuat = [
+                { maPhieuX: 'PX2025003', maKho: 'KHO003', maNong: 'ND001', soLuong: 50, ngayXuat: '2025-11-30', ghiChu: 'Giao siêu thị HCM' }
+            ];
+        }
+        changed = true;
+    }
+
+    if (changed) saveDB();
+}
+
+// Adjust stock levels in `DB.lohang` when receipts or shipments occur.
+// `delta` is positive to increase stock (nhập), negative to decrease (xuất).
+function adjustStockOnReceipt(receipt, delta) {
+    if (!receipt || !receipt.maLo) return;
+    const amt = parseFloat(delta) || 0;
+    const lo = (DB.lohang || []).find(l => l.maLo === receipt.maLo);
+    if (lo) {
+        lo.soLuong = (parseFloat(lo.soLuong) || 0) + amt;
+        if (lo.soLuong < 0) lo.soLuong = 0;
+    } else if (amt > 0) {
+        // create a minimal lohang record when receiving into a new batch
+        DB.lohang.push({
+            maLo: receipt.maLo,
+            sanPham: receipt.sanPham || '',
+            maNong: receipt.maNong || '',
+            soLuong: amt,
+            ngayTao: receipt.ngayNhap || new Date().toLocaleDateString(),
+            hanDung: ''
+        });
+    }
+}
+
+// Render inventory table from `DB.lohang` (tồn kho by batch)
+function renderInventory() {
+    const tbody = document.querySelector('#table-inventory tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    (DB.lohang || []).forEach(l => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${l.maLo}</td>
+            <td>${l.sanPham || ''}</td>
+            <td>${l.soLuong || 0}</td>
+            <td>${l.ngayTao || ''}</td>
+            <td>${(l.soLuong || 0) > 0 ? 'Còn hàng' : 'Hết'}</td>
+            <td>
+                <button class="btn small" onclick="editLohang('${l.maLo}')">Sửa</button>
+                <button class="btn small" onclick="deleteLohang('${l.maLo}')">Xóa</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.deleteLohang = function(maLo) {
+    if (!confirm('Xác nhận xóa lô hàng?')) return;
+    DB.lohang = (DB.lohang || []).filter(x => x.maLo !== maLo);
+    saveDB();
+    renderInventory();
+};
+
+window.editLohang = function(maLo) {
+    const lo = (DB.lohang || []).find(x => x.maLo === maLo);
+    if (!lo) return;
+    const soLuongMoi = prompt('Nhập số lượng mới:', lo.soLuong);
+    if (soLuongMoi !== null) {
+        lo.soLuong = parseInt(soLuongMoi) || 0;
+        saveDB();
+        renderInventory();
+    }
+};
+
+// Open edit modal for an existing receipt (phiếu nhập)
+function openEditReceipt(maPhieu) {
+    const rec = (DB.phieuNhap || []).find(r => r.maPhieu === maPhieu);
+    if (!rec) return;
+    openModalWithTemplate('create-order-template');
+    setTimeout(() => {
+        const form = modalBody.querySelector('#createOrderFormModal');
+        if (!form) return;
+        form.orderId.value = rec.maPhieu || '';
+        form.batchCode.value = rec.maLo || '';
+        form.quantity.value = rec.soLuong || '';
+
+        const farmerSelect = modalBody.querySelector('select[name="farmerId"]');
+        const fromManual = modalBody.querySelector('input[name="fromAddressManual"]');
+        const productSelect = modalBody.querySelector('select[name="product"]');
+        const productManual = modalBody.querySelector('input[name="productManual"]');
+
+        if (farmerSelect) {
+            // try to set farmer if exists, otherwise set manual
+            const opt = Array.from(farmerSelect.options).find(o => o.value === rec.maNong);
+            if (opt) { farmerSelect.value = rec.maNong; fromManual.style.display = 'none'; }
+            else { farmerSelect.value = 'manual'; fromManual.style.display = 'block'; fromManual.value = rec.tenNong || ''; }
+            // trigger change to populate product list
+            farmerSelect.dispatchEvent(new Event('change'));
+        }
+
+        if (productSelect) {
+            const pOpt = Array.from(productSelect.options).find(o => o.value === rec.sanPham);
+            if (pOpt) { productSelect.value = rec.sanPham; productManual.style.display = 'none'; }
+            else { productSelect.value = 'manual'; productManual.style.display = 'block'; productManual.value = rec.sanPham || ''; }
+        }
+
+        form.toAddress.value = rec.khoNhap || '';
+        form.date.value = rec.ngayNhap || '';
+        form.ghichu.value = rec.ghiChu || '';
+
+        form.onsubmit = (ev) => {
+            ev.preventDefault();
+            const f = new FormData(form);
+            const newQty = parseInt(f.get('quantity') || '0', 10) || 0;
+            const oldQty = parseInt(rec.soLuong || '0', 10) || 0;
+            const delta = newQty - oldQty;
+
+            // update receipt fields
+            rec.maPhieu = f.get('orderId') || rec.maPhieu;
+            rec.maLo = f.get('batchCode') || rec.maLo;
+            rec.maNong = f.get('farmerId') || rec.maNong;
+            rec.tenNong = f.get('fromAddressManual') || rec.tenNong;
+            rec.sanPham = (f.get('product') === 'manual') ? (f.get('productManual') || rec.sanPham) : (f.get('product') || rec.sanPham);
+            rec.soLuong = newQty;
+            rec.khoNhap = f.get('toAddress') || rec.khoNhap;
+            rec.ngayNhap = f.get('date') || rec.ngayNhap;
+            rec.ghiChu = f.get('ghichu') || rec.ghiChu;
+
+            // apply stock delta and save
+            adjustStockOnReceipt(rec, delta);
+            saveDB();
+            renderReceiptsFromDB();
+            renderInventory();
+            updateKPIs();
+            closeModal();
+            alert('Cập nhật phiếu: ' + rec.maPhieu);
+        };
+    }, 20);
+}
+
+
 document.querySelectorAll('.menu-link').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        e.preventDefault();
+       
         document.querySelectorAll('.menu-link').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active-page'));
         
@@ -38,33 +370,61 @@ modal.addEventListener('click', (e) => {
     if (e.target === modal) closeModal();
 });
 
+// Initialize the create-order modal: populate farmer and product selects from SQL schema
 function initCreateOrderModal() {
     const farmerSelect = modalBody.querySelector('select[name="farmerId"]');
     const fromManual = modalBody.querySelector('input[name="fromAddressManual"]');
     const productSelect = modalBody.querySelector('select[name="product"]');
     const productManual = modalBody.querySelector('input[name="productManual"]');
+    const khoSelect = modalBody.querySelector('select[name="toAddress"]');
+    const dateInput = modalBody.querySelector('input[name="date"]');
 
     if (!farmerSelect || !productSelect) return;
 
-    const farms = (window.DB && Array.isArray(window.DB.farms)) ? window.DB.farms : [];
-    const batches = (window.DB && Array.isArray(window.DB.batches)) ? window.DB.batches : [];
+    // Set today's date as default
+    if (dateInput) {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+    }
 
-    farmerSelect.innerHTML = '<option value="">-- Chọn nông dân --</option>';
-    if (farms.length) {
-        farms.forEach(f => {
+    // Get current agency from currentUser (logged-in user)
+    const currentAgency = DB.dailyAgencies.find(a => a.maDaiLy === currentUser?.maDaiLy);
+    
+    // Populate kho (warehouses) from DB.kho - already filtered for current user
+    if (khoSelect) {
+        khoSelect.innerHTML = '<option value="">-- Chọn kho nhập --</option>';
+        let khos = Array.isArray(DB.kho) ? DB.kho : [];
+        
+        khos.forEach(k => {
             const opt = document.createElement('option');
-            opt.value = f.id;
-            opt.textContent = f.name || f.id;
+            opt.value = k.maKho;
+            opt.textContent = k.tenKho + (k.diaChi ? ` (${k.diaChi})` : '');
+            khoSelect.appendChild(opt);
+        });
+    }
+
+    // Get farmers from DB.nongdan (SQL: NongDan table with fields: maNong, tenNong, diaChiNong, etc.)
+    const farmers = Array.isArray(DB.nongdan) ? DB.nongdan : [];
+    // Get batches from DB.lohang (SQL: LôHàng table with fields: maLo, sanPham, maNong, soLuong, etc.)
+    const batches = Array.isArray(DB.lohang) ? DB.lohang : [];
+
+    // Populate farmers from NongDan table
+    farmerSelect.innerHTML = '<option value="">-- Chọn nông dân --</option>';
+    if (farmers.length) {
+        farmers.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f.maNong || f.id;  // Use maNong (SQL primary key) or fallback to id
+            opt.textContent = f.tenNong || f.name || (f.maNong || f.id);
             farmerSelect.appendChild(opt);
         });
         farmerSelect.appendChild(new Option('Khác (nhập tay)', 'manual'));
     } else {
-        // no farms available -> allow manual entry
+        // no farmers available -> allow manual entry
         farmerSelect.innerHTML += '<option value="manual">Khác (nhập tay)</option>';
         fromManual.style.display = 'block';
     }
 
-    // initial state for product select
+    // Initial state for product select
     productSelect.innerHTML = '<option value="">-- Chọn nông dân trước --</option>';
     productSelect.disabled = true;
 
@@ -87,12 +447,15 @@ function initCreateOrderModal() {
             return;
         }
 
-        // selected a farm id -> hide manual farmer input
+        // selected a farmer id -> hide manual farmer input
         fromManual.style.display = 'none';
         productManual.style.display = 'none';
 
-        // find products associated with this farmer via batches
-        const prods = batches.filter(b => b.farmId === fid).map(b => b.product).filter(Boolean);
+        // Find products (Sản phẩm) associated with this farmer (MãNông) from LôHàng table
+        const prods = batches
+            .filter(b => (b.maNong || b.farmId) === fid)
+            .map(b => b.sanPham || b.product)
+            .filter(Boolean);
         const unique = [...new Set(prods)];
 
         productSelect.innerHTML = '';
@@ -111,6 +474,160 @@ function initCreateOrderModal() {
     });
 }
 
+// ------------------ Warehouse (Kho) Management ------------------
+function renderKho() {
+    const tbody = document.querySelector('#table-kho tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    (DB.kho || []).forEach(k => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k.maKho}</td><td>${k.tenKho}</td><td>${k.diaChi || ''}</td><td>${k.soDienThoai || ''}</td>
+            <td><button class="btn small" onclick="editKho('${k.maKho}')">Sửa</button>
+                <button class="btn small" onclick="deleteKho('${k.maKho}')">Xóa</button></td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+window.editKho = function(maKho) {
+    const kho = (DB.kho || []).find(k => k.maKho === maKho);
+    openModalWithTemplate('warehouse-template');
+    const form = modalBody.querySelector('#createKhoFormModal');
+    if (!form || !kho) return;
+    form.maKho.value = kho.maKho;
+    form.tenKho.value = kho.tenKho || '';
+    form.diaChi.value = kho.diaChi || '';
+    form.soDienThoai.value = kho.soDienThoai || '';
+    form.onsubmit = (e) => { e.preventDefault(); saveKho(kho.maKho); };
+};
+
+function saveKho(existingId = null) {
+    const form = modalBody.querySelector('#createKhoFormModal');
+    if (!form) return;
+    const maKho = form.maKho.value || `KHO${Date.now()}`;
+    const tenKho = form.tenKho.value;
+    const diaChi = form.diaChi.value;
+    const soDienThoai = form.soDienThoai.value;
+
+    if (!tenKho) { alert('Vui lòng nhập tên kho'); return; }
+
+    if (existingId) {
+        const k = DB.kho.find(x => x.maKho === existingId);
+        if (k) { k.tenKho = tenKho; k.diaChi = diaChi; k.soDienThoai = soDienThoai; }
+    } else {
+        DB.kho.push({ maKho, tenKho, diaChi, soDienThoai, maDaiLy: currentUser?.maDaiLy || 'DL001' });
+    }
+    saveDB();
+    renderKho();
+    closeModal();
+}
+
+window.deleteKho = function(maKho) {
+    if (!confirm('Xác nhận xóa kho này?')) return;
+    DB.kho = (DB.kho || []).filter(k => k.maKho !== maKho);
+    saveDB();
+    renderKho();
+};
+
+// Wire add warehouse button
+document.getElementById('btn-add-nhap-hang')?.addEventListener('click', () => {
+    openModalWithTemplate('warehouse-template');
+    // attach handler for create
+    setTimeout(() => {
+        const form = modalBody.querySelector('#createKhoFormModal');
+        if (form) {
+            form.onsubmit = (e) => { e.preventDefault(); saveKho(); };
+        }
+    }, 10);
+});
+
+// Tab handling for Inventory page
+document.getElementById('tab-nhap-hang')?.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.style.borderBottom = '');
+    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+    
+    this.style.borderBottom = '3px solid #4CAF50';
+    this.style.color = '#4CAF50';
+    document.getElementById('content-nhap-hang').style.display = 'block';
+});
+
+document.getElementById('tab-xuat-hang')?.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.style.borderBottom = '');
+    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+    
+    this.style.borderBottom = '3px solid #4CAF50';
+    this.style.color = '#4CAF50';
+    document.getElementById('content-xuat-hang').style.display = 'block';
+});
+
+// ------------------ Quality (Kiểm định) Management ------------------
+// create DB.kiemDinh if not present
+if (!Array.isArray(DB.kiemDinh)) DB.kiemDinh = JSON.parse(localStorage.getItem('kiemDinh') || '[]');
+
+function saveKiemDinh(existingId = null) {
+    const form = modalBody.querySelector('#createQualityFormModal');
+    if (!form) return;
+    const maKiemDinh = form.maKiemDinh.value || `KD${Date.now()}`;
+    const maLo = form.maLo.value || '';
+    const ngayKiem = form.ngayKiem.value || new Date().toLocaleDateString();
+    const nguoiKiem = form.nguoiKiem.value || '';
+    const ketQua = form.ketQua.value || '';
+    const ghiChu = form.ghiChu.value || '';
+
+    if (existingId) {
+        const rec = DB.kiemDinh.find(x => x.maKiemDinh === existingId);
+        if (rec) { rec.maLo = maLo; rec.ngayKiem = ngayKiem; rec.nguoiKiem = nguoiKiem; rec.ketQua = ketQua; rec.ghiChu = ghiChu; }
+    } else {
+        DB.kiemDinh.push({ maKiemDinh, maLo, ngayKiem, nguoiKiem, ketQua, ghiChu });
+    }
+    saveDB();
+    renderKiemDinh();
+    closeModal();
+}
+
+function renderKiemDinh() {
+    const tbody = document.querySelector('#table-quality tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    (DB.kiemDinh || []).forEach(k => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${k.maKiemDinh}</td><td>${k.maLo}</td><td>${k.ngayKiem}</td><td>${k.nguoiKiem}</td><td>${k.ketQua}</td><td>${k.ghiChu || ''}</td>
+            <td><button class="btn small" onclick="editKiemDinh('${k.maKiemDinh}')">Sửa</button>
+                <button class="btn small" onclick="deleteKiemDinh('${k.maKiemDinh}')">Xóa</button></td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+window.editKiemDinh = function(maKiemDinh) {
+    const rec = (DB.kiemDinh || []).find(x => x.maKiemDinh === maKiemDinh);
+    if (!rec) return;
+    openModalWithTemplate('quality-template');
+    const form = modalBody.querySelector('#createQualityFormModal');
+    if (!form) return;
+    form.maKiemDinh.value = rec.maKiemDinh;
+    form.maLo.value = rec.maLo || '';
+    form.ngayKiem.value = rec.ngayKiem || '';
+    form.nguoiKiem.value = rec.nguoiKiem || '';
+    form.ketQua.value = rec.ketQua || '';
+    form.ghiChu.value = rec.ghiChu || '';
+    form.onsubmit = (e) => { e.preventDefault(); saveKiemDinh(rec.maKiemDinh); };
+};
+
+window.deleteKiemDinh = function(maKiemDinh) {
+    if (!confirm('Xác nhận xóa phiếu kiểm định này?')) return;
+    DB.kiemDinh = (DB.kiemDinh || []).filter(x => x.maKiemDinh !== maKiemDinh);
+    saveDB();
+    renderKiemDinh();
+};
+
+// Wire create quality button
+document.getElementById('btn-create-quality')?.addEventListener('click', () => {
+    openModalWithTemplate('quality-template');
+    setTimeout(() => {
+        const form = modalBody.querySelector('#createQualityFormModal');
+        if (form) form.onsubmit = (e) => { e.preventDefault(); saveKiemDinh(); };
+    }, 10);
+});
+
 // open create order modal from header/dashboard or orders page
 document.querySelectorAll('#btn-create-order, #btn-new-order').forEach(btn => {
     btn?.addEventListener('click', () => openModalWithTemplate('create-order-template'));
@@ -122,18 +639,23 @@ document.addEventListener('click', (e) => {
 });
 
 // Helper to add a row and attach listeners
+// Displays PhiếuNhậpHàng (Receipt) data with SQL schema fields
 function addOrderRow(tableSelector, data) {
     const table = document.querySelector(tableSelector + ' tbody');
     if (!table) return;
     const tr = document.createElement('tr');
-    const batchCell = data.batchCode + (data.product ? (' — ' + data.product) : '');
+    
+    // Build batch cell from maLo and sanPham
+    const batchCell = data.maLo + (data.sanPham ? (' — ' + data.sanPham) : '');
+    const tenNongDisplay = data.tenNong || data.fromAddress || '';
+    
     tr.innerHTML = `
-        <td>${data.orderId}</td>
+        <td>${data.maPhieu}</td>
         <td>${batchCell}</td>
-        <td>${data.quantity}</td>
-        <td>${data.fromAddress || ''}</td>
-        <td>${data.toAddress || ''}</td>
-        <td>${data.date || new Date().toLocaleDateString()}</td>
+        <td>${data.soLuong}</td>
+        <td>${tenNongDisplay}</td>
+        <td>${getKhoName(data.khoNhap)}</td>
+        <td>${data.ngayNhap || new Date().toLocaleDateString()}</td>
         <td class="status-in-transit">${data.status || 'Đã tạo'}</td>
         <td>
             <button class="btn-edit">Sửa</button>
@@ -145,55 +667,84 @@ function addOrderRow(tableSelector, data) {
     // attach listeners for the newly created buttons
     tr.querySelector('.btn-delete')?.addEventListener('click', (e) => {
         if (confirm('Bạn có chắc chắn muốn xóa?')) {
+            const maPhieu = data.maPhieu;
+            const removed = DB.phieuNhap.find(p => p.maPhieu === maPhieu);
+            DB.phieuNhap = DB.phieuNhap.filter(p => p.maPhieu !== maPhieu);
+            if (removed) {
+                adjustStockOnReceipt(removed, - (parseFloat(removed.soLuong) || 0));
+            }
+            saveDB();
             tr.remove();
+            // Update KPI
+            const kpiEl = document.getElementById('kpi-orders');
+            if (kpiEl) {
+                const v = parseInt(kpiEl.textContent || '0', 10) || 0;
+                kpiEl.textContent = Math.max(0, v - 1);
+            }
+            renderInventory();
+            alert('Xóa thành công!');
         }
     });
     tr.querySelector('.btn-edit')?.addEventListener('click', () => {
-        alert('Chức năng sửa sẽ được bổ sung sau.');
+        openEditReceipt(data.maPhieu);
     });
 }
 
 // Handle form submit for the modal create order form (delegated)
+// Saves data according to SQL schema: PhiếuNhậpHàng (Receipt)
 document.addEventListener('submit', (e) => {
     const form = e.target;
     if (form && form.id === 'createOrderFormModal') {
         e.preventDefault();
         const f = new FormData(form);
-        // determine farmer and product values (support selecting from DB or manual input)
-        const farmerId = f.get('farmerId');
-        let fromAddress = '';
-        if (farmerId && farmerId !== 'manual' && window.DB && Array.isArray(window.DB.farms)) {
-            const farm = window.DB.farms.find(x => x.id === farmerId);
-            fromAddress = farm ? (farm.name || farm.address || '') : '';
+        
+        // Extract farmer data (from NongDan table)
+        const maNong = f.get('farmerId');
+        let tenNong = '';
+        if (maNong && maNong !== 'manual') {
+            const farmer = DB.nongdan.find(x => x.maNong === maNong || x.id === maNong);
+            tenNong = farmer ? (farmer.tenNong || farmer.name || '') : '';
         }
-        if (!fromAddress) fromAddress = f.get('fromAddressManual') || '';
+        if (!tenNong) tenNong = f.get('fromAddressManual') || '';
 
-        let product = f.get('product');
-        if (!product || product === 'manual') product = f.get('productManual') || '';
+        // Extract product (Sản phẩm from LôHàng)
+        let sanPham = f.get('product');
+        if (!sanPham || sanPham === 'manual') sanPham = f.get('productManual') || '';
 
-        const data = {
-            orderId: f.get('orderId') || `DH${Date.now()}`,
-            batchCode: f.get('batchCode') || '-',
-            product: product || '',
-            quantity: f.get('quantity') || '0',
-            fromAddress: fromAddress || '',
-            toAddress: f.get('toAddress') || '',
-            date: f.get('date') || new Date().toLocaleDateString(),
-            status: 'Đã tạo'
+        // SQL Schema: PhiếuNhậpHàng (Receipt) table structure
+        const receipt = {
+            maPhieu: f.get('orderId') || `PN${Date.now()}`,           // MãPhiếu (PK)
+            maLo: f.get('batchCode') || '-',                          // MãLô (FK to LôHàng)
+            maNong: maNong || '',                                     // MãNông (FK to NongDan) - optional
+            tenNong: tenNong,                                         // Farmer name (denorm)
+            sanPham: sanPham,                                         // Sản phẩm (denorm)
+            soLuong: parseInt(f.get('quantity') || '0'),              // SốLượng
+            khoNhap: f.get('toAddress') || '',                        // KhoNhập (warehouse address)
+            ngayNhap: f.get('date') || new Date().toLocaleDateString(),  // NgàyNhập
+            ghiChu: f.get('ghichu') || '',                             // GhiChú (notes)
+            status: 'Đã tạo'                                          // Additional status field
         };
 
+        // Save to DB and localStorage
+        // Save to DB and update stock
+        DB.phieuNhap.push(receipt);
+        // increase stock for the batch (lohang)
+        adjustStockOnReceipt(receipt, receipt.soLuong);
+        saveDB();
+
         // Add to main orders table and dashboard recent orders table
-        addOrderRow('#table-orders-all', data);
-        // The dashboard recent orders table has fewer columns; create a compact row
+        addOrderRow('#table-orders-all', receipt);
+        
+        // Add to dashboard recent orders table (compact view)
         const dashTable = document.querySelector('#table-orders tbody');
         if (dashTable) {
             const tr = document.createElement('tr');
-            const batchCell = data.batchCode + (data.product ? (' — ' + data.product) : '');
-            tr.innerHTML = `<td>${data.orderId}</td><td>${batchCell}</td><td>${data.quantity}</td><td>${data.toAddress}</td><td>${data.date}</td><td class="status-in-transit">${data.status}</td>`;
+            const batchCell = receipt.maLo + (receipt.sanPham ? (' — ' + receipt.sanPham) : '');
+            tr.innerHTML = `<td>${receipt.maPhieu}</td><td>${batchCell}</td><td>${receipt.soLuong}</td><td>${getKhoName(receipt.khoNhap)}</td><td>${receipt.ngayNhap}</td><td class="status-in-transit">${receipt.status}</td>`;
             dashTable.prepend(tr);
         }
 
-        // update KPI
+        // Update KPI
         const kpiEl = document.getElementById('kpi-orders');
         if (kpiEl) {
             const v = parseInt(kpiEl.textContent || '0', 10) || 0;
@@ -201,7 +752,7 @@ document.addEventListener('submit', (e) => {
         }
 
         closeModal();
-        alert('Đã nhập hàng: ' + data.orderId);
+        alert('Đã nhập hàng: ' + receipt.maPhieu);
     }
 });
 
@@ -258,5 +809,102 @@ document.querySelectorAll('.btn-delete').forEach(btn => {
     });
 });
 
+// ========== INITIALIZATION ==========
+// Load persisted data and render on page load
+window.addEventListener('DOMContentLoaded', () => {
+    // Load current user
+    loadCurrentUser();
+    
+    // Clear old shared data format before loading new per-user data
+    clearOldDataFormat();
+    
+    // Load per-user database
+    loadDB();
+    
+    // Display current user info
+    const userDisplay = document.getElementById('current-user');
+    const agencyDisplay = document.getElementById('current-agency');
+    
+    if (userDisplay) {
+        userDisplay.innerHTML = `<strong>👤 ${currentUser?.fullName || 'User'}</strong>`;
+    }
+    
+    if (agencyDisplay) {
+        const agency = DB.dailyAgencies.find(a => a.maDaiLy === currentUser?.maDaiLy);
+        agencyDisplay.innerHTML = `<small>🏢 ${agency ? agency.tenDaiLy : 'Đại lý'}</small>`;
+    }
+    
+    // Ensure demo data exists, then render persisted PhiếuNhập from localStorage
+    seedSampleData();
+    renderReceiptsFromDB();
+    renderKho();
+    renderKiemDinh();
+    renderInventory();
+    updateKPIs();
+});
+
+function renderReceiptsFromDB() {
+    const receipts = DB.phieuNhap || [];
+    const mainTable = document.querySelector('#table-orders-all tbody');
+    const dashTable = document.querySelector('#table-orders tbody');
+    
+    if (mainTable) {
+        mainTable.innerHTML = '';
+        receipts.forEach(receipt => {
+            const batchCell = receipt.maLo + (receipt.sanPham ? (' — ' + receipt.sanPham) : '');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>${receipt.maPhieu}</td>
+                <td>${batchCell}</td>
+                <td>${receipt.soLuong}</td>
+                <td>${receipt.tenNong || ''}</td>
+                <td>${getKhoName(receipt.khoNhap)}</td>
+                <td>${receipt.ngayNhap}</td>
+                <td class="status-in-transit">${receipt.status || 'Đã tạo'}</td>
+                <td>
+                    <button class="btn-edit">Sửa</button>
+                    <button class="btn-delete">Xóa</button>
+                </td>
+            `;
+            mainTable.appendChild(tr);
+            
+            // attach delete listener
+            tr.querySelector('.btn-delete')?.addEventListener('click', () => {
+                if (confirm('Bạn có chắc chắn muốn xóa?')) {
+                    // decrement stock for this receipt's batch
+                    adjustStockOnReceipt(receipt, - (parseFloat(receipt.soLuong) || 0));
+                    DB.phieuNhap = DB.phieuNhap.filter(p => p.maPhieu !== receipt.maPhieu);
+                    saveDB();
+                    tr.remove();
+                    renderInventory();
+                    updateKPIs();
+                    alert('Xóa thành công!');
+                }
+            });
+            tr.querySelector('.btn-edit')?.addEventListener('click', () => {
+                openEditReceipt(receipt.maPhieu);
+            });
+        });
+    }
+    
+    // Render recent receipts in dashboard (limit to last 5)
+    if (dashTable) {
+        dashTable.innerHTML = '';
+        receipts.slice(0, 5).forEach(receipt => {
+            const batchCell = receipt.maLo + (receipt.sanPham ? (' — ' + receipt.sanPham) : '');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${receipt.maPhieu}</td><td>${batchCell}</td><td>${receipt.soLuong}</td><td>${receipt.khoNhap}</td><td>${receipt.ngayNhap}</td><td class="status-in-transit">${receipt.status}</td>`;
+            dashTable.appendChild(tr);
+        });
+    }
+}
+
+function updateKPIs() {
+    // Update receipt count KPI
+    const kpiOrders = document.getElementById('kpi-orders');
+    if (kpiOrders) {
+        kpiOrders.textContent = (DB.phieuNhap || []).length;
+    }
+}
 
 console.log('Daily Management System loaded successfully!');

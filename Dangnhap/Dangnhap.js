@@ -1,22 +1,36 @@
+// ========== LOCALSTORAGE HELPERS ==========
+function loadUsers() {
+    return JSON.parse(localStorage.getItem('users') || '[]');
+}
+
+function saveUsers(users) {
+    localStorage.setItem('users', JSON.stringify(users));
+}
+
+function initializeDefaultUsers() {
+    const existing = loadUsers();
+    if (existing.length > 0) return; // already initialized
+    
+    const defaultUsers = [
+        { id: 1, role: 'admin', username: 'admin', password: 'admin123', fullName: 'Admin' },
+        { id: 2, role: 'nongdan', username: 'nongdan1', password: 'pass123', fullName: 'Nông dân 1' },
+        { id: 3, role: 'nongdan', username: 'nongdan2', password: 'pass123', fullName: 'Nông dân 2' },
+        { id: 4, role: 'daily', username: 'daily1', password: 'pass123', fullName: 'Đại lý 1', maDaiLy: 'DL001' },
+        { id: 5, role: 'daily', username: 'daily2', password: 'pass123', fullName: 'Đại lý 2', maDaiLy: 'DL002' },
+        { id: 6, role: 'sieuthi', username: 'sieuthi1', password: 'pass123', fullName: 'Siêu thị 1' },
+        { id: 7, role: 'sieuthi', username: 'sieuthi2', password: 'pass123', fullName: 'Siêu thị 2' }
+    ];
+    saveUsers(defaultUsers);
+}
+
+function findUser(accountType, username, password) {
+    const users = loadUsers();
+    return users.find(u => u.role === accountType && u.username === username && u.password === password);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    // Test accounts for each type
-    const accounts = {
-        admin: [
-            { username: 'admin', password: 'admin123' }
-        ],
-        nongdan: [
-            { username: 'nongdan1', password: 'pass123' },
-            { username: 'nongdan2', password: 'pass123' }
-        ],
-        daily: [
-            { username: 'daily1', password: 'pass123' },
-            { username: 'daily2', password: 'pass123' }
-        ],
-        sieuthi: [
-            { username: 'sieuthi1', password: 'pass123' },
-            { username: 'sieuthi2', password: 'pass123' }
-        ]
-    };
+    // Initialize default users on first load
+    initializeDefaultUsers();
 
     const loginForm = document.getElementById('loginForm');
     const loginAlert = document.getElementById('loginAlert');
@@ -33,30 +47,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Check if account exists and credentials match
-        const storedAccounts = JSON.parse(localStorage.getItem('testAccounts') || '[]');
-        const userExists = [...accounts[accountType], ...storedAccounts].find(
-            acc => acc.username === username && acc.password === password
-        );
+        // Check if user exists and credentials match
+        const userExists = findUser(accountType, username, password);
 
         if (userExists) {
+            // Store current logged-in user in sessionStorage for page-to-page access
+            sessionStorage.setItem('currentUser', JSON.stringify(userExists));
             showAlert('Đăng nhập thành công!', 'success');
             // Redirect based on account type
             setTimeout(() => {
-                switch(accountType) {
-                    case 'admin':
-                        window.location.href = '../Admin/Admin.html';
-                        break;
-                    case 'nongdan':
-                        window.location.href = '../Nongdan/Nongdan.html';
-                        break;
-                    case 'daily':
-                        window.location.href = '../Daily/Daily.html';
-                        break;
-                    case 'sieuthi':
-                        window.location.href = '../Sieuthi/Sieuthi.html';
-                        break;
-                }
+                const redirects = {
+                    admin: '../Admin/Admin.html',
+                    nongdan: '../Nongdan/Nongdan.html',
+                    daily: '../Daily/Daily.html',
+                    sieuthi: '../Sieuthi/Sieuthi.html'
+                };
+                window.location.href = redirects[accountType] || '../Admin/Admin.html';
             }, 1000);
         } else {
             showAlert('Tên đăng nhập hoặc mật khẩu không đúng!', 'error');

@@ -1,3 +1,22 @@
+// ========== LOCALSTORAGE HELPERS (shared with Dangnhap.js) ==========
+function loadUsers() {
+    return JSON.parse(localStorage.getItem('users') || '[]');
+}
+
+function saveUsers(users) {
+    localStorage.setItem('users', JSON.stringify(users));
+}
+
+function userExists(role, username) {
+    const users = loadUsers();
+    return users.some(u => u.role === role && u.username === username);
+}
+
+function emailExists(email, role) {
+    const users = loadUsers();
+    return users.some(u => u.email === email && u.role === role);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const roleCards = document.querySelectorAll('.role-card');
     const userRoleInput = document.getElementById('userRole');
@@ -83,21 +102,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (password.length < 8) return showAlert('Mật khẩu tối thiểu 8 ký tự', 'error');
         if (password !== confirmPassword) return showAlert('Mật khẩu và xác nhận không khớp', 'error');
 
-        const stored = JSON.parse(localStorage.getItem('testAccounts') || '[]');
+        // Load current users from localStorage
+        let users = loadUsers();
 
-        let username = usernameInputValue || generateUsername(role, fullName, stored);
+        let username = usernameInputValue || generateUsername(role, fullName, users);
 
-        if (usernameInputValue && stored.some(acc => acc.username === username)) {
+        // Check username uniqueness
+        if (usernameInputValue && userExists(role, username)) {
             return showAlert('Tên tài khoản đã tồn tại, vui lòng chọn tên khác', 'error');
         }
 
-        if (stored.some(acc => acc.email === email && acc.role === role)) {
+        // Check email uniqueness per role
+        if (emailExists(email, role)) {
             return showAlert('Email này đã được đăng ký cho vai trò đã chọn', 'error');
         }
 
-        // username đã xác định phía trên
-
-        // Build account object (store role-specific fields too)
+        // Build account object
         const account = {
             id: Date.now(),
             role,
@@ -105,11 +125,11 @@ document.addEventListener('DOMContentLoaded', () => {
             fullName,
             phone,
             email,
-            password, // lưu plaintext chỉ phục vụ test; không dùng production
+            password, // plaintext only for dev/demo; never do this in production
             createdAt: new Date().toISOString()
         };
 
-        // attach role specific data
+        // Attach role-specific fields
         if (role === 'farmer') {
             account.farmName = document.getElementById('farmName').value.trim();
             account.farmArea = document.getElementById('farmArea').value;
@@ -127,12 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
             account.storeSize = document.getElementById('storeSize').value;
         }
 
-        stored.push(account);
-        localStorage.setItem('testAccounts', JSON.stringify(stored)); // Store account in localStorage
+        // Add new account to users array and save
+        users.push(account);
+        saveUsers(users);
 
-        // Save successful registration notification
-        localStorage.setItem('registrationSuccess', 'true');
-        
         showAlert('Đăng ký thành công', 'success');
         // Redirect to login page after 2 seconds
         setTimeout(() => {
@@ -184,11 +202,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .replace(/^_+|_+$/g, '');
     }
 
-    function generateUsername(role, fullName, existingAccounts) {
+    function generateUsername(role, fullName, existingUsers) {
         const base = `${role}_${slugify(fullName.split(' ')[0] || fullName)}`.slice(0, 20);
         let username = base;
         let i = 1;
-        const exists = () => existingAccounts.some(a => a.username === username);
+        const exists = () => existingUsers.some(u => u.username === username);
         while (exists()) {
             username = `${base}${i}`;
             i++;
