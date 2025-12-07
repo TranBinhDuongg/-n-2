@@ -1,0 +1,275 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Siêu thị - Quản lý bán hàng</title>
+    <link rel="stylesheet" href="Sieuthi.css">
+    <script src="Sieuthi.js" defer></script>
+</head>
+<body>
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a href="#" class="logo">
+                <i class="fas fa-shopping-cart"></i>
+                <span>Siêu thị</span>
+            </a>
+            <div id="user-info">
+                <div id="current-user"></div>
+                <div id="current-agency"></div>
+            </div>
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="#" class="menu-link active" data-section="dashboard"><i class="fas fa-home"></i> <span>Trang chủ</span></a></li>
+            <li><a href="#" class="menu-link" data-section="users"><i class="fas fa-users"></i> <span>Quản lý người dùng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="inventory"><i class="fas fa-warehouse"></i> <span>Quản lý kho hàng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="sales"><i class="fas fa-shopping-bag"></i> <span>Quản lý bán hàng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="reports"><i class="fas fa-chart-bar"></i> <span>Báo cáo thống kê</span></a></li>
+            <li class="sidebar-logout">
+                <a href="/Dangnhap/Dangnhap.html" class="menu-link"><i class="fas fa-sign-out-alt"></i> <span>Đăng xuất</span></a>
+            </li>
+        </ul>
+    </aside>
+
+    <main class="main-content">
+        <!-- Dashboard -->
+        <section id="dashboard" class="page active-page">
+            <div class="page-header">
+                <h2>Bảng điều khiển</h2>
+                <div class="header-actions">
+                    <button id="btn-new-user" class="btn">+ Thêm nhân viên</button>
+                    <button id="btn-new-product" class="btn">+ Nhập hàng mới</button>
+                </div>
+            </div>
+
+            <div class="kpis">
+                <div class="kpi">
+                    <h3 id="kpi-users">0</h3>
+                    <p>Nhân viên</p>
+                </div>
+                <div class="kpi">
+                    <h3 id="kpi-inventory">0</h3>
+                    <p>Sản phẩm tồn kho</p>
+                </div>
+                <div class="kpi">
+                    <h3 id="kpi-sales">0</h3>
+                    <p>Hóa đơn bán</p>
+                </div>
+                <div class="kpi">
+                    <h3 id="kpi-revenue">0</h3>
+                    <p>Doanh thu</p>
+                </div>
+            </div>
+
+            <div class="lists">
+                <div class="list">
+                    <h4>Hóa đơn gần đây</h4>
+                    <table id="table-sales-recent" class="table">
+                        <thead><tr><th>Mã HĐ</th><th>Sản phẩm</th><th>SL</th><th>Tổng tiền</th><th>Ngày</th><th>Trạng thái</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="list">
+                    <h4>Sản phẩm sắp hết hàng</h4>
+                    <table id="table-low-stock" class="table">
+                        <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>SL còn</th><th>Nhà cung cấp</th><th>Hành động</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Users Management -->
+        <section id="users" class="page">
+            <div class="page-header">
+                <h2>Quản lý nhân viên</h2>
+                <button id="btn-add-user" class="btn">+ Thêm nhân viên</button>
+            </div>
+            <table id="table-users" class="table">
+                <thead><tr><th>ID</th><th>Tên nhân viên</th><th>Chức vụ</th><th>Số điện thoại</th><th>Ngày tuyển dụng</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <!-- Inventory Management -->
+        <section id="inventory" class="page">
+            <div class="page-header">
+                <h2>Quản lý kho hàng</h2>
+                <button id="btn-import-product" class="btn">+ Nhập hàng từ Đại lý</button>
+            </div>
+            <div class="lists">
+                <div class="list">
+                    <h4>Danh sách hàng tồn kho</h4>
+                    <table id="table-inventory-all" class="table">
+                        <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>SL tồn</th><th>Giá nhập</th><th>Giá bán</th><th>Nhà cung cấp</th><th>Hạn dùng</th><th>Hành động</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="list">
+                    <h4>Nhập hàng từ Đại lý</h4>
+                    <p class="note">Danh sách phiếu nhập từ Đại lý</p>
+                    <table id="table-import-history" class="table">
+                        <thead><tr><th>Mã phiếu</th><th>Sản phẩm</th><th>SL</th><th>Giá nhập</th><th>Đại lý</th><th>Ngày nhập</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sales Management -->
+        <section id="sales" class="page">
+            <div class="page-header">
+                <h2>Quản lý bán hàng</h2>
+                <button id="btn-new-invoice" class="btn">+ Tạo hóa đơn mới</button>
+            </div>
+            <table id="table-sales-all" class="table">
+                <thead><tr><th>Mã HĐ</th><th>Sản phẩm</th><th>SL bán</th><th>Giá bán</th><th>Tổng tiền</th><th>Nhân viên bán</th><th>Ngày bán</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <!-- Reports -->
+        <section id="reports" class="page">
+            <div class="page-header">
+                <h2>Báo cáo thống kê</h2>
+            </div>
+            <div class="report-cards">
+                <div class="report-card">
+                    <i class="fas fa-box"></i>
+                    <h4>Tổng sản phẩm</h4>
+                    <div id="report-total-products">—</div>
+                </div>
+                <div class="report-card">
+                    <i class="fas fa-dolly"></i>
+                    <h4>Tổng tồn kho</h4>
+                    <div id="report-total-stock">—</div>
+                </div>
+                <div class="report-card">
+                    <i class="fas fa-cash-register"></i>
+                    <h4>Tổng doanh thu</h4>
+                    <div id="report-total-revenue">—</div>
+                </div>
+                <div class="report-card">
+                    <i class="fas fa-chart-line"></i>
+                    <h4>Số hóa đơn</h4>
+                    <div id="report-total-invoices">—</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal -->
+    <div id="modal" class="modal hidden">
+        <div class="modal-content">
+            <button class="modal-close">&times;</button>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <template id="add-user-template">
+        <form id="addUserFormModal" class="modal-form">
+            <h3>Thêm nhân viên</h3>
+            
+            <label>Họ tên</label>
+            <input name="hoTen" type="text" placeholder="Nhập họ tên nhân viên" required />
+
+            <label>Chức vụ</label>
+            <select name="chucVu" required>
+                <option value="">-- Chọn chức vụ --</option>
+                <option value="Quản lý kho">Quản lý kho</option>
+                <option value="Nhân viên bán hàng">Nhân viên bán hàng</option>
+                <option value="Thu ngân">Thu ngân</option>
+                <option value="Quản lý ca">Quản lý ca</option>
+            </select>
+
+            <label>Số điện thoại</label>
+            <input name="soDienThoai" type="text" placeholder="0912345678" />
+
+            <label>Ngày tuyển dụng</label>
+            <input name="ngayTuyenDung" type="date" required />
+
+            <label>Ghi chú</label>
+            <input name="ghiChu" type="text" placeholder="Ghi chú thêm (tùy chọn)" />
+
+            <div class="modal-actions">
+                <button type="button" class="btn cancel modal-close-btn">Hủy</button>
+                <button type="submit" class="btn">Thêm nhân viên</button>
+            </div>
+        </form>
+    </template>
+
+    <template id="add-product-template">
+        <form id="addProductFormModal" class="modal-form">
+            <h3>Nhập hàng từ Đại lý</h3>
+            
+            <label>Mã phiếu nhập</label>
+            <input name="maPhieu" type="text" placeholder="vd: PN_ST001" required />
+
+            <label>Sản phẩm</label>
+            <select name="sanPham" required>
+                <option value="">-- Chọn sản phẩm --</option>
+            </select>
+
+            <label>Số lượng</label>
+            <input name="soLuong" type="number" min="1" placeholder="Số lượng" required />
+
+            <label>Giá nhập (VNĐ)</label>
+            <input name="giaNhap" type="number" min="0" placeholder="Giá nhập" required />
+
+            <label>Giá bán (VNĐ)</label>
+            <input name="giaBan" type="number" min="0" placeholder="Giá bán" required />
+
+            <label>Đại lý cung cấp</label>
+            <select name="dailyId" required>
+                <option value="">-- Chọn Đại lý --</option>
+            </select>
+
+            <label>Hạn dùng</label>
+            <input name="hanDung" type="date" />
+
+            <label>Ghi chú</label>
+            <input name="ghiChu" type="text" placeholder="Ghi chú (tùy chọn)" />
+
+            <div class="modal-actions">
+                <button type="button" class="btn cancel modal-close-btn">Hủy</button>
+                <button type="submit" class="btn">Nhập hàng</button>
+            </div>
+        </form>
+    </template>
+
+    <template id="create-invoice-template">
+        <form id="createInvoiceFormModal" class="modal-form">
+            <h3>Tạo hóa đơn bán hàng</h3>
+            
+            <label>Mã hóa đơn</label>
+            <input name="maHD" type="text" placeholder="vd: HD2025001" required />
+
+            <label>Sản phẩm</label>
+            <select name="sanPham" required>
+                <option value="">-- Chọn sản phẩm --</option>
+            </select>
+
+            <label>Số lượng bán</label>
+            <input name="soLuong" type="number" min="1" placeholder="Số lượng" required />
+
+            <label>Giá bán (VNĐ)</label>
+            <input name="giaBan" type="number" min="0" placeholder="Giá bán" readonly />
+
+            <label>Nhân viên bán</label>
+            <select name="nhanVienBan" required>
+                <option value="">-- Chọn nhân viên --</option>
+            </select>
+
+            <label>Ngày bán</label>
+            <input name="ngayBan" type="date" required />
+
+            <label>Ghi chú</label>
+            <input name="ghiChu" type="text" placeholder="Ghi chú (tùy chọn)" />
+
+            <div class="modal-actions">
+                <button type="button" class="btn cancel modal-close-btn">Hủy</button>
+                <button type="submit" class="btn">Tạo hóa đơn</button>
+            </div>
+        </form>
+    </template>
+
+</body>
+
