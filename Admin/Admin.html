@@ -1,0 +1,108 @@
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>Admin - Quản trị hệ thống</title>
+	<link rel="stylesheet" href="Admin.css">
+	<script src="Admin.js" defer></script>
+</head>
+<body>
+	<aside class="sidebar">
+		<div class="sidebar-header">
+			<a class="logo" href="#"><span>Admin</span></a>
+			<div class="user-info">
+				<div id="admin-user-name">—</div>
+				<div id="admin-user-role">Quản trị hệ thống</div>
+			</div>
+		</div>
+		<ul class="sidebar-menu">
+			<li><a href="#dashboard" class="menu-link active" data-section="dashboard">Trang chủ</a></li>
+			<li><a href="#users" class="menu-link" data-section="users">Quản lý người dùng</a></li>
+			<li><a href="#farms" class="menu-link" data-section="farms">Quản lý trang trại</a></li>
+			<li><a href="#batches" class="menu-link" data-section="batches">Quản lý lô hàng</a></li>
+			<li><a href="#orders" class="menu-link" data-section="orders">Quản lý đơn hàng</a></li>
+			<li><a href="#logs" class="menu-link" data-section="logs">Audit / Log</a></li>
+			<li><a href="#reports" class="menu-link" data-section="reports">Báo cáo</a></li>
+			<li class="sidebar-logout"><a href="/Dangnhap/Dangnhap.html" class="menu-link">Đăng xuất</a></li>
+		</ul>
+	</aside>
+
+	<main class="main-content">
+		<section id="dashboard" class="page active-page">
+			<div class="page-header">
+				<h2>Bảng điều khiển Admin</h2>
+				<div>
+					<button id="btn-seed-data" class="btn">Seed demo</button>
+				</div>
+			</div>
+
+			<div class="kpis">
+				<div class="kpi"><h3 id="kpi-total-users">0</h3><p>Người dùng</p></div>
+				<div class="kpi"><h3 id="kpi-total-farms">0</h3><p>Trang trại</p></div>
+				<div class="kpi"><h3 id="kpi-total-batches">0</h3><p>Lô hàng</p></div>
+				<div class="kpi"><h3 id="kpi-total-orders">0</h3><p>Đơn hàng</p></div>
+			</div>
+
+			<div class="lists">
+				<div class="list"><h4>Hoạt động gần đây</h4><table id="table-recent" class="table"><thead><tr><th>Thời gian</th><th>Người</th><th>Hành động</th></tr></thead><tbody></tbody></table></div>
+				<div class="list"><h4>Thông tin hệ thống</h4><p class="note">Quản lý toàn diện các vai trò: Nông dân / Đại lý / Siêu thị</p></div>
+			</div>
+		</section>
+
+		<section id="users" class="page">
+			<div class="page-header"><h2>Quản lý người dùng</h2><button id="btn-add-admin-user" class="btn">+ Thêm người dùng</button></div>
+			<table id="table-admin-users" class="table"><thead><tr><th>ID</th><th>Họ tên</th><th>Vai trò</th><th>Email</th><th>Hành động</th></tr></thead><tbody></tbody></table>
+		</section>
+
+		<section id="farms" class="page">
+			<div class="page-header"><h2>Quản lý trang trại</h2><button id="btn-add-farm" class="btn">+ Thêm trang trại</button></div>
+			<table id="table-farms" class="table"><thead><tr><th>Mã</th><th>Tên</th><th>Chủ</th><th>Địa chỉ</th><th>Hành động</th></tr></thead><tbody></tbody></table>
+		</section>
+
+		<section id="batches" class="page">
+			<div class="page-header"><h2>Quản lý lô hàng</h2></div>
+			<table id="table-batches" class="table"><thead><tr><th>Mã lô</th><th>Sản phẩm</th><th>SL</th><th>Ngày thu hoạch</th><th>Hành động</th></tr></thead><tbody></tbody></table>
+		</section>
+
+		<section id="orders" class="page">
+			<div class="page-header"><h2>Quản lý đơn hàng</h2></div>
+			<table id="table-orders" class="table"><thead><tr><th>Mã</th><th>Người đặt</th><th>Đại lý</th><th>SL</th><th>Trạng thái</th><th>Hành động</th></tr></thead><tbody></tbody></table>
+		</section>
+
+		<section id="logs" class="page">
+			<div class="page-header"><h2>Audit / Log</h2></div>
+			<table id="table-logs" class="table"><thead><tr><th>Thời gian</th><th>Người</th><th>Sự kiện</th></tr></thead><tbody></tbody></table>
+		</section>
+
+		<section id="reports" class="page">
+			<div class="page-header"><h2>Báo cáo tổng hợp</h2></div>
+			<div class="lists">
+				<div class="list"><h4>Báo cáo doanh thu</h4><div id="report-revenue">—</div></div>
+				<div class="list"><h4>Báo cáo tồn kho</h4><div id="report-stock">—</div></div>
+			</div>
+		</section>
+	</main>
+
+	<div id="modal" class="modal hidden"><div class="modal-content"><button class="modal-close">&times;</button><div id="modal-body"></div></div></div>
+
+	<template id="add-user-template">
+		<form class="modal-form">
+			<h3>Thêm người dùng</h3>
+			<label>Họ tên</label><input name="hoTen" required />
+			<label>Vai trò</label>
+			<select name="role"><option value="admin">Admin</option><option value="nongdan">Nông dân</option><option value="daily">Đại lý</option><option value="sieuthi">Siêu thị</option></select>
+			<div class="modal-actions"><button type="button" class="btn cancel modal-close-btn">Hủy</button><button type="submit" class="btn">Thêm</button></div>
+		</form>
+	</template>
+
+	<template id="add-farm-template">
+		<form class="modal-form">
+			<h3>Thêm trang trại</h3>
+			<label>Tên trang trại</label><input name="ten" required />
+			<label>Chủ</label><input name="chu" />
+			<div class="modal-actions"><button type="button" class="btn cancel modal-close-btn">Hủy</button><button type="submit" class="btn">Thêm</button></div>
+		</form>
+	</template>
+
+</body>
+</html>
