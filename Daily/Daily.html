@@ -1,3 +1,5 @@
+<!DOCTYPE html>
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,20 +10,19 @@
 <body>
     <aside class="sidebar">
         <div class="sidebar-header">
-            <a href="#" class="logo">
-                <i class="fas fa-box"></i>
-                <span>Đại lý</span>
-            </a>
-            
+            <div id="user-info">
+                <div id="current-user"></div>
+                <div id="current-role"></div>
+            </div>
         </div>
         <ul class="sidebar-menu">
-            <li><a href="#" class="menu-link active" data-section="dashboard"><i class="fas fa-home"></i> <span>Bảng điều khiển</span></a></li>
-            <li><a href="#" class="menu-link" data-section="orders"><i class="fas fa-cube"></i> <span>Quản lý Đơn hàng</span></a></li>
-            <li><a href="#" class="menu-link" data-section="inventory"><i class="fas fa-warehouse"></i> <span>Quản lý Kho</span></a></li>
-            <li><a href="#" class="menu-link" data-section="quality"><i class="fas fa-clipboard-check"></i> <span>Kiểm định Chất lượng</span></a></li>
-            <li><a href="#" class="menu-link" data-section="reports"><i class="fas fa-chart-bar"></i> <span>Báo cáo thống kê</span></a></li>
-            <li class="sidebar-logout">
-                <a href="/Dangnhap/Dangnhap.html" class="menu-link"><i class="fas fa-sign-out-alt"></i> <span>Đăng xuất</span></a>
+            <li><a href="#" class="menu-link active" data-section="dashboard"><span>Bảng điều khiển</span></a></li>
+            <li><a href="#" class="menu-link" data-section="orders"><span>Quản lý Đơn hàng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="inventory"><span>Quản lý Kho</span></a></li>
+            <li><a href="#" class="menu-link" data-section="quality"><span>Kiểm định Chất lượng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="reports"><span>Báo cáo thống kê</span></a></li>
+            <li style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:10px;">
+                <a href="/Dangnhap/Dangnhap.html" class="menu-link"><span>Đăng xuất</span></a>
             </li>
         </ul>
     </aside>
@@ -285,3 +286,4 @@
     </div>
 
 </body>
+</html>
