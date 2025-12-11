@@ -1,8 +1,4 @@
-/* ==========================
-   Sieuthi CSS - Organized
-   ========================== */
 
-/* ---------- Base ---------- */
 :root{
   --bg: #f5f7fa;
   --accent: #4CAF50;
@@ -123,7 +119,3 @@ body{
   .lists{grid-template-columns:1fr}
   .modal-content{width:90%}
 }
-
-/* Ensure sidebar links are clickable even when modal overlays hidden */
-.modal.hidden { pointer-events: none; }
-.modal { pointer-events: auto; }

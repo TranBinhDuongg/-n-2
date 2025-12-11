@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Siêu thị - Quản lý bán hàng</title>
+    <title>Quản lý Đơn hàng Hàng Ngày - Daily</title>
     <link rel="stylesheet" href="Sieuthi.css">
-    <script src="Sieuthi.js" defer></script>
+    <script src="Sieuthijs.js" defer></script>
 </head>
 <body>
     <aside class="sidebar">
         <div class="sidebar-header">
             <div id="user-info">
                 <div id="current-user"></div>
-                <div id="current-agency"></div>
+                <div id="current-role"></div>
             </div>
         </div>
         <ul class="sidebar-menu">
-            <li><a href="#dashboard" class="menu-link" data-section="dashboard"><span>Trang chủ</span></a></li>
-            <li><a href="#users" class="menu-link" data-section="users"><span>Quản lý người dùng</span></a></li>
-            <li><a href="#inventory" class="menu-link" data-section="inventory"><span>Quản lý kho hàng</span></a></li>
-            <li><a href="#sales" class="menu-link" data-section="sales"><span>Quản lý bán hàng</span></a></li>
-            <li><a href="#reports" class="menu-link" data-section="reports"><span>Báo cáo thống kê</span></a></li>
+            <li><a href="#" class="menu-link active" data-section="dashboard"><span>Bảng điều khiển</span></a></li>
+            <li><a href="#" class="menu-link" data-section="orders"><span>Quản lý Đơn hàng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="inventory"><span>Quản lý Kho</span></a></li>
+            <li><a href="#" class="menu-link" data-section="quality"><span>Kiểm định Chất lượng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="reports"><span>Báo cáo thống kê</span></a></li>
             <li style="border-top:1px solid rgba(255,255,255,0.1);margin-top:10px;padding-top:10px;">
                 <a href="/Dangnhap/Dangnhap.html" class="menu-link"><span>Đăng xuất</span></a>
             </li>
@@ -33,85 +33,119 @@
             <div class="page-header">
                 <h2>Bảng điều khiển</h2>
                 <div class="header-actions">
-                    <button id="btn-new-user" class="btn">+ Thêm nhân viên</button>
-                    <button id="btn-new-product" class="btn">+ Nhập hàng mới</button>
+                    <button id="btn-new-order" class="btn">+ Nhập hàng</button>
+                    <button id="btn-new-shipment" class="btn">+ Xuất hàng</button>
                 </div>
             </div>
 
             <div class="kpis">
                 <div class="kpi">
-                    <h3 id="kpi-users">0</h3>
-                    <p>Nhân viên</p>
+                    <h3 id="kpi-orders">0</h3>
+                    <p>Phiếu nhập</p>
+                </div>
+                <div class="kpi">
+                    <h3 id="kpi-shipments">0</h3>
+                    <p>Phiếu xuất</p>
                 </div>
                 <div class="kpi">
                     <h3 id="kpi-inventory">0</h3>
-                    <p>Sản phẩm tồn kho</p>
+                    <p>Kho hàng</p>
                 </div>
                 <div class="kpi">
-                    <h3 id="kpi-sales">0</h3>
-                    <p>Hóa đơn bán</p>
-                </div>
-                <div class="kpi">
-                    <h3 id="kpi-revenue">0</h3>
-                    <p>Doanh thu</p>
+                    <h3 id="kpi-quality">0</h3>
+                    <p>Cảnh báo chất lượng</p>
                 </div>
             </div>
 
             <div class="lists">
                 <div class="list">
-                    <h4>Hóa đơn gần đây</h4>
-                    <table id="table-sales-recent" class="table">
-                        <thead><tr><th>Mã HĐ</th><th>Sản phẩm</th><th>SL</th><th>Tổng tiền</th><th>Ngày</th><th>Trạng thái</th></tr></thead>
+                    <h4>Đơn hàng gần đây</h4>
+                    <table id="table-orders" class="table">
+                        <thead><tr><th>MãPhiếu</th><th>MãLô — Sản phẩm</th><th>SL</th><th>Kho</th><th>Ngày</th><th>Trạng thái</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
                 <div class="list">
-                    <h4>Sản phẩm sắp hết hàng</h4>
-                    <table id="table-low-stock" class="table">
-                        <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>SL còn</th><th>Nhà cung cấp</th><th>Hành động</th></tr></thead>
+                    <h4>Cảnh báo chất lượng</h4>
+                    <table id="table-quality-alerts" class="table">
+                        <thead><tr><th>ID</th><th>Lô hàng</th><th>Vấn đề</th><th>Ngày</th><th>Mức độ</th></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
             </div>
         </section>
 
-        <!-- Users Management -->
-        <section id="users" class="page">
+        <!-- Orders -->
+        <section id="orders" class="page">
             <div class="page-header">
-                <h2>Quản lý nhân viên</h2>
-                <button id="btn-add-user" class="btn">+ Thêm nhân viên</button>
+                <h2>Nhập hàng</h2>
+                <button id="btn-create-order" class="btn">+ Nhập hàng mới</button>
             </div>
-            <table id="table-users" class="table">
-                <thead><tr><th>ID</th><th>Tên nhân viên</th><th>Chức vụ</th><th>Số điện thoại</th><th>Ngày tuyển dụng</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+            <table id="table-orders-all" class="table">
+                <thead><tr><th>MãPhiếu</th><th>MãLô — Sản phẩm</th><th>SốLượng</th><th>Nông dân</th><th>KhoNhập</th><th>NgàyNhập</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
                 <tbody></tbody>
             </table>
         </section>
 
-        <!-- Inventory Management -->
+        <!-- Inventory -->
         <section id="inventory" class="page">
             <div class="page-header">
-                <h2>Quản lý kho hàng</h2>
-                <button id="btn-import-product" class="btn">+ Nhập hàng từ Đại lý</button>
+                <h2>Quản lý Kho</h2>
             </div>
-            <div class="lists">
-                <div class="list">
-                    <h4>Danh sách hàng tồn kho</h4>
-                    <table id="table-inventory-all" class="table">
-                        <thead><tr><th>Mã SP</th><th>Tên sản phẩm</th><th>SL tồn</th><th>Giá nhập</th><th>Giá bán</th><th>Nhà cung cấp</th><th>Hạn dùng</th><th>Hành động</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
+            
+            <!-- Tab buttons -->
+            <div style="margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; display: flex; gap: 12px;">
+                <button id="tab-nhap-hang" class="btn tab-btn active" style="background: transparent; color: #1a472a; border: none; border-bottom: 3px solid #4CAF50; padding: 12px 16px; margin-bottom: -2px;">Nhập hàng</button>
+                <button id="tab-xuat-hang" class="btn tab-btn" style="background: transparent; color: #1a472a; border: none; padding: 12px 16px; margin-bottom: -2px;">Xuất hàng</button>
+            </div>
+
+            <!-- Nhập hàng (Import) -->
+            <div id="content-nhap-hang" class="tab-content" style="display: block;">
+                <div class="page-header" style="margin-bottom: 16px;">
+                    <div></div>
+                    <button id="btn-add-nhap-hang" class="btn">+ Thêm kho nhập</button>
+                </div>
+                <div class="lists">
+                    <div class="list" style="grid-column: 1/-1;">
+                        <h4>Danh sách kho nhập hàng</h4>
+                        <table id="table-kho" class="table">
+                            <thead><tr><th>MãKho</th><th>TênKho</th><th>ĐịaChỉ</th><th>SĐT</th><th>Hành động</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="list" style="grid-column: 1/-1;">
+                        <h4>Tồn kho hiện tại (theo lô sản phẩm)</h4>
+                        <table id="table-inventory" class="table">
+                            <thead><tr><th>MãLô</th><th>Sản phẩm</th><th>Số lượng</th><th>Ngày nhập</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Xuất hàng (Export) - Tạm thời bỏ trống -->
+            <div id="content-xuat-hang" class="tab-content" style="display: none;">
+                <div class="page-header" style="margin-bottom: 16px;">
+                    <div></div>
+                    <button id="btn-add-xuat-hang" class="btn" disabled>+ Thêm phiếu xuất (Đang phát triển)</button>
+                </div>
+                <div class="lists">
+                    <div class="list" style="grid-column: 1/-1;">
+                        <h4>Danh sách phiếu xuất hàng</h4>
+                        <p style="color: #999; text-align: center; padding: 20px;">Chức năng xuất hàng đang được phát triển...</p>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <!-- Sales Management -->
-        <section id="sales" class="page">
+        <!-- Quality -->
+        <section id="quality" class="page">
             <div class="page-header">
-                <h2>Quản lý bán hàng</h2>
-                <button id="btn-new-invoice" class="btn">+ Tạo hóa đơn mới</button>
+                <h2>Kiểm định Chất lượng</h2>
+                <button id="btn-create-quality" class="btn">+ Tạo phiếu kiểm định</button>
             </div>
-            <table id="table-sales-all" class="table">
-                <thead><tr><th>Mã HĐ</th><th>Sản phẩm</th><th>SL bán</th><th>Giá bán</th><th>Tổng tiền</th><th>Nhân viên bán</th><th>Ngày bán</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+            <table id="table-quality" class="table">
+                <thead><tr><th>ID</th><th>Lô hàng</th><th>Ngày kiểm</th><th>Người kiểm</th><th>Kết quả</th><th>Ghi chú</th><th>Hành động</th></tr></thead>
                 <tbody></tbody>
             </table>
         </section>
@@ -123,24 +157,125 @@
             </div>
             <div class="report-cards">
                 <div class="report-card">
-                    <h4>Tổng sản phẩm</h4>
-                    <div id="report-total-products">—</div>
+                    <i class="fas fa-dolly"></i>
+                    <h4>Tổng đơn hàng</h4>
+                    <div id="report-orders">—</div>
                 </div>
                 <div class="report-card">
-                    <h4>Tổng tồn kho</h4>
-                    <div id="report-total-stock">—</div>
+                    <i class="fas fa-truck"></i>
+                    <h4>Đã xuất hàng</h4>
+                    <div id="report-shipped">—</div>
                 </div>
                 <div class="report-card">
-                    <h4>Tổng doanh thu</h4>
-                    <div id="report-total-revenue">—</div>
+                    <i class="fas fa-boxes"></i>
+                    <h4>Tồn kho</h4>
+                    <div id="report-stock">—</div>
                 </div>
                 <div class="report-card">
-                    <h4>Số hóa đơn</h4>
-                    <div id="report-total-invoices">—</div>
+                    <i class="fas fa-check-circle"></i>
+                    <h4>Đạt chất lượng</h4>
+                    <div id="report-quality">—</div>
                 </div>
             </div>
         </section>
     </main>
+
+    <template id="create-order-template">
+        <form id="createOrderFormModal" class="modal-form">
+            <h3>Nhập hàng từ Nông dân</h3>
+            
+            <label>Mã phiếu nhập (MãPhiếu)</label>
+            <input name="orderId" type="text" placeholder="vd: PN001" required />
+
+            <label>Mã lô (MãLô)</label>
+            <input name="batchCode" type="text" placeholder="vd: LO001" required />
+
+            <label>Số lượng (SốLượng)</label>
+            <input name="quantity" type="number" min="1" placeholder="Số lượng" required />
+
+            <label>Nông dân (MãNông)</label>
+            <select name="farmerId">
+                <option value="">-- Chọn nông dân --</option>
+            </select>
+            <input name="fromAddressManual" type="text" placeholder="Tên hoặc địa chỉ nông dân (nhập tay)" style="display:none;margin-top:8px;" />
+
+            <label>Loại hàng (Sản phẩm)</label>
+            <select name="product" disabled>
+                <option value="">-- Chọn nông dân trước --</option>
+            </select>
+            <input name="productManual" type="text" placeholder="Loại hàng (nhập tay)" style="display:none;margin-top:8px;" />
+
+            <label>Kho nhập (KhoNhập)</label>
+            <select name="toAddress" required>
+                <option value="">-- Chọn kho nhập --</option>
+            </select>
+
+            <label>Ngày nhập (NgàyNhập)</label>
+            <input name="date" type="date" required />
+
+            <label>Ghi chú (GhiChú)</label>
+            <input name="ghichu" type="text" placeholder="Ghi chú thêm (tùy chọn)" />
+
+            <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn cancel modal-close-btn">Hủy</button>
+                <button type="submit" class="btn">Nhập hàng</button>
+            </div>
+        </form>
+    </template>
+
+    <template id="warehouse-template">
+        <form id="createKhoFormModal" class="modal-form">
+            <h3>Thêm / Sửa Kho</h3>
+            <label>Mã kho</label>
+            <input name="maKho" type="text" placeholder="vd: KHO01" />
+
+            <label>Tên kho</label>
+            <input name="tenKho" type="text" placeholder="Tên kho" required />
+
+            <label>Địa chỉ</label>
+            <input name="diaChi" type="text" placeholder="Địa chỉ" />
+
+            <label>Số điện thoại</label>
+            <input name="soDienThoai" type="text" placeholder="Số điện thoại" />
+
+            <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn cancel modal-close-btn">Hủy</button>
+                <button type="submit" class="btn">Lưu kho</button>
+            </div>
+        </form>
+    </template>
+
+    <template id="quality-template">
+        <form id="createQualityFormModal" class="modal-form">
+            <h3>Thêm phiếu kiểm định</h3>
+            <label>Mã kiểm định</label>
+            <input name="maKiemDinh" type="text" placeholder="vd: KD001" />
+
+            <label>Mã lô</label>
+            <input name="maLo" type="text" placeholder="Mã lô (vd: LO1001)" />
+
+            <label>Ngày kiểm</label>
+            <input name="ngayKiem" type="date" />
+
+            <label>Người kiểm</label>
+            <input name="nguoiKiem" type="text" placeholder="Người kiểm" />
+
+            <label>Kết quả</label>
+            <select name="ketQua">
+                <option value="Đạt">Đạt</option>
+                <option value="Không đạt">Không đạt</option>
+                <option value="Yêu cầu bổ sung">Yêu cầu bổ sung</option>
+            </select>
+
+            <label>Ghi chú</label>
+            <input name="ghiChu" type="text" placeholder="Ghi chú (tùy chọn)" />
+
+            <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+                <button type="button" class="btn cancel modal-close-btn">Hủy</button>
+                <button type="submit" class="btn">Lưu kiểm định</button>
+            </div>
+        </form>
+    </template>
 
     <!-- Modal -->
     <div id="modal" class="modal hidden">
