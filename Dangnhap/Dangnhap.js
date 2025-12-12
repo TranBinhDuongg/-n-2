@@ -78,4 +78,32 @@ document.addEventListener('DOMContentLoaded', () => {
             loginAlert.classList.remove('show');
         }, 5000);
     }
+
+    // Password show/hide toggle (robust for repeated clicks)
+    const pwdInput = document.getElementById('loginPassword');
+    const toggleBtn = document.getElementById('togglePassword');
+    if (pwdInput && toggleBtn) {
+        toggleBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            // Toggle input type
+            const isPwd = pwdInput.getAttribute('type') === 'password';
+            try {
+                pwdInput.setAttribute('type', isPwd ? 'text' : 'password');
+            } catch (err) {
+                // Some browsers may throw when changing type on certain inputs; fall back to replacing the node
+                const newInput = pwdInput.cloneNode(true);
+                newInput.setAttribute('type', isPwd ? 'text' : 'password');
+                pwdInput.parentNode.replaceChild(newInput, pwdInput);
+            }
+            // Update button label for accessibility
+            toggleBtn.textContent = isPwd ? 'Ẩn' : 'Hiện';
+            toggleBtn.setAttribute('aria-label', isPwd ? 'Ẩn mật khẩu' : 'Hiện mật khẩu');
+            // Reassign reference if node was replaced
+            if (pwdInput.parentNode && pwdInput.parentNode.querySelector) {
+                // update local variable to the possibly replaced input
+                const updated = pwdInput.parentNode.querySelector('#loginPassword');
+                if (updated) pwdInput = updated; // eslint-disable-line no-param-reassign
+            }
+        });
+    }
 });

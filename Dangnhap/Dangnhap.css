@@ -279,3 +279,20 @@ body {
                 align-items: flex-start;
             }
         }
+
+/* Password toggle button inside input-group */
+.password-toggle {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #33CC33;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+}
+.password-toggle:focus { outline: none; }
