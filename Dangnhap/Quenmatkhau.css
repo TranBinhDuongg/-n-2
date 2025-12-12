@@ -4,6 +4,10 @@
     box-sizing: border-box;
 }
 
+:root{
+    --container-max: 450px;
+}
+
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background: linear-gradient(135deg, #33FF33 0%, #33CC33 100%);
@@ -11,7 +15,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 20px;
+    padding: clamp(12px, 2.5vw, 24px);
 }
 
 .auth-container {
@@ -19,7 +23,7 @@ body {
     border-radius: 20px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     overflow: hidden;
-    max-width: 450px;
+    max-width: min(92vw, var(--container-max));
     width: 100%;
     animation: fadeIn 0.5s;
 }
@@ -37,7 +41,7 @@ body {
 
 .auth-header {
     background: linear-gradient(135deg, #33FF33 0%, #33CC33 100%);
-    padding: 40px;
+    padding: clamp(18px, 4vw, 40px);
     text-align: center;
     color: white;
 }
@@ -48,7 +52,7 @@ body {
 }
 
 .auth-header h2 {
-    font-size: 28px;
+    font-size: clamp(18px, 2.6vw, 28px);
     margin-bottom: 10px;
 }
 
@@ -59,7 +63,7 @@ body {
 }
 
 .auth-body {
-    padding: 40px;
+    padding: clamp(16px, 4vw, 40px);
 }
 
 .alert {
@@ -111,7 +115,7 @@ body {
     margin-bottom: 8px;
     color: #333;
     font-weight: 600;
-    font-size: 14px;
+    font-size: clamp(13px, 1.6vw, 14px);
 }
 
 .input-group {
@@ -128,10 +132,10 @@ body {
 
 .form-control {
     width: 100%;
-    padding: 12px 15px 12px 45px;
+    padding: clamp(10px, 1.6vw, 12px) clamp(12px, 2.2vw, 15px) clamp(10px, 1.6vw, 12px) 45px;
     border: 2px solid #e0e0e0;
     border-radius: 10px;
-    font-size: 14px;
+    font-size: clamp(13px, 1.6vw, 14px);
     transition: all 0.3s;
 }
 
@@ -142,10 +146,10 @@ body {
 
 .btn {
     width: 100%;
-    padding: 14px;
+    padding: clamp(10px, 1.8vw, 14px);
     border: none;
     border-radius: 10px;
-    font-size: 16px;
+    font-size: clamp(14px, 1.8vw, 16px);
     font-weight: 600;
     cursor: pointer;
     display: flex;
@@ -218,7 +222,7 @@ body {
     .auth-header {
         padding: 30px 20px;
     }
-    
+
     .auth-body {
         padding: 30px 20px;
     }
