@@ -46,6 +46,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const userDisplay = document.getElementById('current-user');
         if (userDisplay) userDisplay.textContent = currentUser.fullName;
     }
+    // Display current role (make it friendly)
+    if (currentUser?.role) {
+        const roleDisplay = document.getElementById('current-role');
+        if (roleDisplay) roleDisplay.textContent = (currentUser.role || '').toString().replace(/(^|_)([a-z])/g, (_, a, b) => b ? b.toUpperCase() : '').replace(/_/g, ' ');
+    }
 
     const links = document.querySelectorAll('.menu-link');
     const pages = document.querySelectorAll('.page');
@@ -69,6 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
             location.hash = s;
         });
     });
+
+    // Logo goes to dashboard
+    document.querySelectorAll('.logo').forEach(l => l.addEventListener('click', (e) => { e.preventDefault(); location.hash = 'dashboard'; }));
+
+    // Header action: new report -> open reports section
+    document.getElementById('btn-new-report')?.addEventListener('click', () => { location.hash = 'reports'; });
 
     // ========== MODAL HELPERS ==========
     function openModal(templateId) {
