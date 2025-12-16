@@ -853,19 +853,32 @@ window.markMarketOrderReceived = function(maPhieu) {
     const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
     const ord = all.find(x => x.uid === uid && String(x.fromDailyUserId) === String(currentUser?.id));
     if (!ord) return alert('Không tìm thấy đơn');
+
     // ensure it's recorded in this daily's phieuNhap if not exists
     if (!DB.phieuNhap.find(p => p.maPhieu === ord.maPhieu)) {
-        DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'Đã nhận' });
-        saveDB();
+        DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'Chờ kiểm định' });
     }
+
+    // create a quality-check (kiểm định) entry assigned to this Daily
+    try {
+        if (!Array.isArray(DB.kiemDinh)) DB.kiemDinh = loadUserData('kiemDinh') || [];
+        const maKiemDinh = 'KD' + Date.now();
+        DB.kiemDinh.push({ maKiemDinh, maLo: ord.maLo, ngayKiem: '', nguoiKiem: '', ketQua: 'Chưa kiểm', ghiChu: 'Tự động tạo sau khi nhận: ' + ord.maPhieu });
+    } catch (e) { console.warn('failed to create kiemDinh', e); }
+
+    // persist per-user data
+    saveDB();
 
     // remove the market order from shared storage since it's been received (by uid)
     const remaining = all.filter(x => x.uid !== uid);
     localStorage.setItem('market_orders', JSON.stringify(remaining));
 
-    alert('Đã xác nhận nhận hàng và xóa đơn từ inbox.');
-    // refresh to reflect changes
-    location.reload();
+    alert('Đã nhận hàng. Phiếu nhập chuyển sang kiểm định chất lượng.');
+
+    // Refresh UI without full reload
+    try { renderReceiptsFromDB(); } catch (e) {}
+    try { renderKiemDinh(); } catch (e) {}
+    try { loadMarketOrdersForDaily(); } catch (e) {}
 };
 
 // Form Submissions

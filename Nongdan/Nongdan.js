@@ -151,68 +151,102 @@ function renderIncomingOrders() {
         })() : 'Đại lý';
         const status = m.status || 'pending';
         let actions = '';
+        const idKey = m.uid || m.maPhieu;
         if (status === 'pending') {
-            actions = `<button class="btn small" onclick="confirmIncomingOrder('${m.maPhieu}')">Xác nhận</button>`;
+            actions = `<button class="btn small" onclick="confirmIncomingOrder('${idKey}')">Xác nhận</button>`;
         } else if (status === 'preparing') {
-            actions = `<button class="btn small" onclick="openShipModal('${m.maPhieu}')">Xuất đơn</button>`;
+            actions = `<button class="btn small" onclick="openShipModal('${idKey}')">Xuất đơn</button>`;
         } else if (status === 'shipped') {
             actions = `<span>Đã xuất</span>`;
         } else if (status === 'received') {
             actions = `<span>Đã nhận bởi Đại lý</span>`;
         }
 
-        tr.innerHTML = `<td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${dailyName}</td><td>${(m.ngayTao||'')}</td><td>${status}</td><td>${actions}</td>`;
+        tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${dailyName}</td><td>${(m.ngayTao||'')}</td><td>${status}</td><td>${actions}</td>`;
         tbody.appendChild(tr);
     });
 }
 
-window.confirmIncomingOrder = function(maPhieu) {
+window.confirmIncomingOrder = function(idKey) {
+    console.debug('confirmIncomingOrder called with idKey=', idKey);
     const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
-    const ord = all.find(x => x.maPhieu === maPhieu && String(x.toFarmerUserId) === String(currentUser?.id));
-    if (!ord) return alert('Không tìm thấy đơn');
-    ord.status = 'preparing';
+    console.debug('market_orders current:', all);
+    const idx = all.findIndex(x => (String(x.uid) === String(idKey) || String(x.maPhieu) === String(idKey)) && String(x.toFarmerUserId) === String(currentUser?.id));
+    console.debug('found index=', idx);
+    if (idx === -1) return alert('Không tìm thấy đơn');
+    all[idx].status = 'preparing';
     localStorage.setItem('market_orders', JSON.stringify(all));
     // reload local view
     DB.marketOrders = all.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
     renderIncomingOrders();
+    console.debug('market_orders after confirm:', all);
     alert('Đã xác nhận nhận đơn, đang chuẩn bị.');
 };
 
-window.openShipModal = function(maPhieu) {
+window.openShipModal = function(idKey) {
     openModal(`
         <h3>Xuất đơn</h3>
         <label>Ngày gửi</label><input id="ship-date" type="date" />
         <label>Ghi chú</label><input id="ship-note" />
-        <div style="margin-top:10px"><button onclick="shipIncomingOrder('${maPhieu}')" class="btn">Xuất</button> <button onclick="closeModal()" class="btn">Hủy</button></div>
+        <div style="margin-top:10px"><button onclick="shipIncomingOrder('${idKey}')" class="btn">Xuất</button> <button onclick="closeModal()" class="btn">Hủy</button></div>
     `);
 };
 
-window.shipIncomingOrder = function(maPhieu) {
+window.shipIncomingOrder = function(idKey) {
+    console.debug('shipIncomingOrder called with idKey=', idKey);
     const date = document.getElementById('ship-date')?.value || new Date().toLocaleDateString();
     const note = document.getElementById('ship-note')?.value || '';
     const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
-    const ord = all.find(x => x.maPhieu === maPhieu && String(x.toFarmerUserId) === String(currentUser?.id));
-    if (!ord) return alert('Không tìm thấy đơn');
+    console.debug('market_orders current:', all);
+    const idx = all.findIndex(x => (String(x.uid) === String(idKey) || String(x.maPhieu) === String(idKey)) && String(x.toFarmerUserId) === String(currentUser?.id));
+    console.debug('found index=', idx);
+    if (idx === -1) {
+        console.warn('shipIncomingOrder: order not found for', idKey);
+        return alert('Không tìm thấy đơn');
+    }
+    const ord = all[idx];
     ord.status = 'shipped';
     ord.shipInfo = { ngayGui: date, note };
     localStorage.setItem('market_orders', JSON.stringify(all));
     // Decrease stock for the shipped batch both in per-user DB and shared lohang
     try {
         const shippedQty = parseFloat(ord.soLuong) || 0;
-        // decrease in per-user DB.batches if maLo matches a batch id
-        const batch = DB.batches.find(b => String(b.id) === String(ord.maLo) || String(b.id) === String(ord.maLo));
+        // 1) Try to reduce in per-user DB.batches by exact id match
+        let reduced = false;
+        let batch = DB.batches.find(b => String(b.id) === String(ord.maLo));
+        // 2) Fallback: match by product name and sufficient quantity
+        if (!batch) {
+            batch = DB.batches.find(b => String(b.product) === String(ord.sanPham) && (parseFloat(b.quantity) || 0) >= shippedQty);
+        }
+        // 3) Another fallback: match by product name regardless of quantity
+        if (!batch) {
+            batch = DB.batches.find(b => String(b.product) === String(ord.sanPham));
+        }
         if (batch) {
             batch.quantity = Math.max(0, (parseFloat(batch.quantity) || 0) - shippedQty);
+            reduced = true;
         }
-        // decrease in shared lohang
+
+        // decrease in shared lohang (try exact maLo first)
         const allLohang = JSON.parse(localStorage.getItem('lohang') || '[]');
-        const lo = allLohang.find(l => String(l.maLo) === String(ord.maLo));
+        let lo = allLohang.find(l => String(l.maLo) === String(ord.maLo));
+        if (!lo) {
+            // fallback: match by product + farmer id
+            lo = allLohang.find(l => String(l.sanPham) === String(ord.sanPham) && (String(l.maNong) === String(currentUser?.maNong) || String(l.maNong) === String(currentUser?.id)));
+        }
         if (lo) {
             lo.soLuong = Math.max(0, (parseFloat(lo.soLuong) || 0) - shippedQty);
+            reduced = true;
         }
         // persist changes
         localStorage.setItem('lohang', JSON.stringify(allLohang));
         saveDB();
+        // record exported order into farmer's DB.orders
+        try {
+            const outId = 'O' + Date.now();
+            DB.orders.push({ id: outId, batchId: ord.maLo || (batch && batch.id) || '', quantity: shippedQty, recipient: ord.fromDailyUserId || ord.to, kho: ord.khoNhap || '', date, status: 'completed' });
+            saveDB();
+        } catch (e) { console.warn('failed to record DB.orders', e); }
     } catch (e) { console.warn('Error adjusting stock on ship', e); }
 
     DB.marketOrders = all.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
@@ -221,6 +255,7 @@ window.shipIncomingOrder = function(maPhieu) {
     renderKhoNhap();
     renderReports();
     closeModal();
+    console.debug('market_orders after ship:', all);
     alert('Đã xuất đơn và chuyển cho Đại lý. Số lượng trong lô đã được cập nhật.');
 };
 
