@@ -28,7 +28,6 @@
     </aside>
 
     <main class="main-content">
-        <!-- Dashboard -->
         <section id="dashboard" class="page active-page">
             <div class="page-header">
                 <h2>Bảng điều khiển</h2>
@@ -65,13 +64,6 @@
                         <tbody></tbody>
                     </table>
                 </div>
-                <div class="list">
-                    <h4>Đơn hàng gần đây</h4>
-                    <table id="table-orders-recent" class="table">
-                        <thead><tr><th>ID</th><th>Lô</th><th>SL</th><th>Người nhận</th><th>Ngày</th><th>Trạng thái</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
             </div>
         </section>
 
@@ -105,10 +97,16 @@
                 <h2>Quản lý đơn hàng</h2>
                 <button id="btn-new-order" class="btn">+ Tạo đơn hàng (Xuất)</button>
             </div>
-            <table id="table-orders-all" class="table">
-                <thead><tr><th>ID</th><th>Lô</th><th>SL</th><th>Người nhận</th><th>Kho xuất</th><th>Ngày</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                <tbody></tbody>
-            </table>
+            <div class="lists">
+                <div class="list">
+                    <h4>Đơn từ Đại lý gửi tới tôi</h4>
+                    <table id="table-incoming-orders" class="table">
+                        <thead><tr><th>MãPhiếu</th><th>MãLô — Sản phẩm</th><th>SốLượng</th><th>Đại lý</th><th>Ngày tạo</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Farmer's own orders table removed; incoming orders handled above -->
         </section>
 
         <!-- Kho (Nhập / Xuất) -->

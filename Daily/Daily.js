@@ -403,18 +403,19 @@ function initCreateOrderModal() {
         });
     }
 
-    // Get farmers from DB.nongdan (SQL: NongDan table with fields: maNong, tenNong, diaChiNong, etc.)
-    const farmers = Array.isArray(DB.nongdan) ? DB.nongdan : [];
+    // Get farmers from registered users (only users with role 'nongdan')
+    const allUsers = JSON.parse(localStorage.getItem('users') || '[]');
+    const farmers = Array.isArray(allUsers) ? allUsers.filter(u => u.role === 'nongdan') : [];
     // Get batches from DB.lohang (SQL: LôHàng table with fields: maLo, sanPham, maNong, soLuong, etc.)
     const batches = Array.isArray(DB.lohang) ? DB.lohang : [];
 
-    // Populate farmers from NongDan table
+    // Populate farmers from registered users
     farmerSelect.innerHTML = '<option value="">-- Chọn nông dân --</option>';
     if (farmers.length) {
         farmers.forEach(f => {
             const opt = document.createElement('option');
-            opt.value = f.maNong || f.id;  // Use maNong (SQL primary key) or fallback to id
-            opt.textContent = f.tenNong || f.name || (f.maNong || f.id);
+            opt.value = f.id;  // store user.id so we can target farmer by user id
+            opt.textContent = f.fullName || f.hoTen || f.username || f.id;
             farmerSelect.appendChild(opt);
         });
         farmerSelect.appendChild(new Option('Khác (nhập tay)', 'manual'));
@@ -451,13 +452,64 @@ function initCreateOrderModal() {
         fromManual.style.display = 'none';
         productManual.style.display = 'none';
 
-        // Find products (Sản phẩm) associated with this farmer (MãNông) from LôHàng table
+        // Find products associated with this farmer from LôHàng table.
+        // Match by multiple identifiers because DB.lohang may use maNong codes (e.g. 'ND001')
+        const users = JSON.parse(localStorage.getItem('users') || '[]');
+        const farmerUser = users.find(u => String(u.id) === String(fid));
+        const ids = new Set();
+        if (farmerUser) {
+            if (farmerUser.maNong) ids.add(String(farmerUser.maNong));
+            ids.add(String(farmerUser.id));
+            if (farmerUser.username) ids.add(String(farmerUser.username));
+            if (farmerUser.fullName) ids.add(String(farmerUser.fullName));
+            if (farmerUser.hoTen) ids.add(String(farmerUser.hoTen));
+        }
+
+        // Fallback: try to map registered farmer user to DB.nongdan (seeded maNong codes)
+        try {
+            const ndList = Array.isArray(DB.nongdan) ? DB.nongdan : JSON.parse(localStorage.getItem('nongdan') || '[]');
+            if (farmerUser && ndList.length) {
+                const matchNd = ndList.find(n => {
+                    if (!n) return false;
+                    const ten = (n.tenNong || n.ten || '').toString();
+                    return ten === farmerUser.fullName || ten === farmerUser.hoTen || ten.includes(farmerUser.fullName) || ten.includes(farmerUser.hoTen);
+                });
+                if (matchNd && matchNd.maNong) ids.add(String(matchNd.maNong));
+            }
+        } catch (e) { /* ignore */ }
+
         const prods = batches
-            .filter(b => (b.maNong || b.farmId) === fid)
+            .filter(b => {
+                const ownerId = String(b.maNong || b.farmId || '');
+                if (ids.has(ownerId)) return true;
+                // also match by farmName containing farmer name
+                if (farmerUser && b.farmName && farmerUser.fullName && String(b.farmName).includes(farmerUser.fullName)) return true;
+                if (farmerUser && b.farmName && farmerUser.hoTen && String(b.farmName).includes(farmerUser.hoTen)) return true;
+                return false;
+            })
             .map(b => b.sanPham || b.product)
             .filter(Boolean);
         const unique = [...new Set(prods)];
 
+        // If no suggestions found, try direct lookup by maNong from DB.lohang using DB.nongdan mapping
+        if (unique.length === 0 && farmerUser) {
+            let fallbackProds = [];
+            try {
+                const ndList = Array.isArray(DB.nongdan) ? DB.nongdan : JSON.parse(localStorage.getItem('nongdan') || '[]');
+                const matchNd = ndList.find(n => {
+                    if (!n) return false;
+                    const ten = (n.tenNong || n.ten || '').toString();
+                    return ten === farmerUser.fullName || ten === farmerUser.hoTen || ten.includes(farmerUser.fullName) || ten.includes(farmerUser.hoTen);
+                });
+                if (matchNd && matchNd.maNong) {
+                    fallbackProds = (batches || []).filter(b => String(b.maNong) === String(matchNd.maNong)).map(b => b.sanPham || b.product).filter(Boolean);
+                }
+            } catch (e) { /* ignore */ }
+            if (fallbackProds.length) {
+                const uniq2 = [...new Set(fallbackProds)];
+                unique.push(...uniq2);
+            }
+        }
         productSelect.innerHTML = '';
         if (unique.length) {
             productSelect.appendChild(new Option('-- Chọn loại hàng --', ''));
@@ -698,12 +750,13 @@ document.addEventListener('submit', (e) => {
         e.preventDefault();
         const f = new FormData(form);
         
-        // Extract farmer data (from NongDan table)
-        const maNong = f.get('farmerId');
+        // Extract farmer data (from registered users list)
+        const farmerUserId = f.get('farmerId');
         let tenNong = '';
-        if (maNong && maNong !== 'manual') {
-            const farmer = DB.nongdan.find(x => x.maNong === maNong || x.id === maNong);
-            tenNong = farmer ? (farmer.tenNong || farmer.name || '') : '';
+        if (farmerUserId && farmerUserId !== 'manual') {
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const farmer = users.find(u => String(u.id) === String(farmerUserId));
+            tenNong = farmer ? (farmer.fullName || farmer.hoTen || farmer.username || '') : '';
         }
         if (!tenNong) tenNong = f.get('fromAddressManual') || '';
 
@@ -715,7 +768,7 @@ document.addEventListener('submit', (e) => {
         const receipt = {
             maPhieu: f.get('orderId') || `PN${Date.now()}`,           // MãPhiếu (PK)
             maLo: f.get('batchCode') || '-',                          // MãLô (FK to LôHàng)
-            maNong: maNong || '',                                     // MãNông (FK to NongDan) - optional
+            maNongUserId: farmerUserId || '',                         // target farmer user id
             tenNong: tenNong,                                         // Farmer name (denorm)
             sanPham: sanPham,                                         // Sản phẩm (denorm)
             soLuong: parseInt(f.get('quantity') || '0'),              // SốLượng
@@ -751,10 +804,69 @@ document.addEventListener('submit', (e) => {
             kpiEl.textContent = v + 1;
         }
 
+        // -- Notify farmer by writing a market order into shared storage --
+        try {
+            const market = JSON.parse(localStorage.getItem('market_orders') || '[]');
+            const uid = 'MO' + Date.now() + Math.random().toString(36).slice(2,8);
+            market.push({
+                uid,
+                maPhieu: receipt.maPhieu,
+                fromDailyUserId: currentUser?.id || currentUser?.maDaiLy || null,
+                toFarmerUserId: receipt.maNongUserId || '',
+                maLo: receipt.maLo,
+                sanPham: receipt.sanPham,
+                soLuong: receipt.soLuong,
+                khoNhap: receipt.khoNhap,
+                ngayTao: new Date().toISOString(),
+                status: 'pending'
+            });
+            localStorage.setItem('market_orders', JSON.stringify(market));
+        } catch (err) { console.warn('market_orders write failed', err); }
+
         closeModal();
         alert('Đã nhập hàng: ' + receipt.maPhieu);
     }
 });
+
+// Load shipped market orders that belong to this daily (so daily can mark received)
+function loadMarketOrdersForDaily() {
+    const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
+    const my = all.filter(m => String(m.fromDailyUserId) === String(currentUser?.id));
+    const shipped = my.filter(m => m.status === 'shipped');
+    // render into orders table (append as rows with a "Đã nhận" button)
+    const mainTable = document.querySelector('#table-orders-all tbody');
+    if (!mainTable) return;
+    shipped.forEach(m => {
+        // avoid duplicating if row exists (use uid)
+        if (!m.uid) return; // defensive
+        if (mainTable.querySelector(`[data-market='${m.uid}']`)) return;
+        const tr = document.createElement('tr');
+        tr.dataset.market = m.uid;
+        tr.innerHTML = `<td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>—</td><td>${m.khoNhap || ''}</td><td>${m.ngayTao || ''}</td><td class="status-in-transit">Đã xuất</td>
+            <td><button class="btn small" onclick="markMarketOrderReceived('${m.uid}')">Đã nhận</button></td>`;
+        mainTable.prepend(tr);
+    });
+}
+
+window.markMarketOrderReceived = function(maPhieu) {
+    const uid = maPhieu; // parameter is uid now
+    const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
+    const ord = all.find(x => x.uid === uid && String(x.fromDailyUserId) === String(currentUser?.id));
+    if (!ord) return alert('Không tìm thấy đơn');
+    // ensure it's recorded in this daily's phieuNhap if not exists
+    if (!DB.phieuNhap.find(p => p.maPhieu === ord.maPhieu)) {
+        DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'Đã nhận' });
+        saveDB();
+    }
+
+    // remove the market order from shared storage since it's been received (by uid)
+    const remaining = all.filter(x => x.uid !== uid);
+    localStorage.setItem('market_orders', JSON.stringify(remaining));
+
+    alert('Đã xác nhận nhận hàng và xóa đơn từ inbox.');
+    // refresh to reflect changes
+    location.reload();
+};
 
 // Form Submissions
 document.getElementById('createOrderForm')?.addEventListener('submit', (e) => {
@@ -841,6 +953,8 @@ window.addEventListener('DOMContentLoaded', () => {
     renderKiemDinh();
     renderInventory();
     updateKPIs();
+    // Load any market orders that have been shipped to this daily so they can confirm receipt
+    try { loadMarketOrdersForDaily(); } catch (e) { /* ignore */ }
 });
 
 function renderReceiptsFromDB() {

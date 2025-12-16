@@ -11,10 +11,10 @@ function initializeDefaultUsers() {
     const existing = loadUsers();
     if (existing.length > 0) return; // already initialized
     
-    const defaultUsers = [
+        const defaultUsers = [
         { id: 1, role: 'admin', username: 'admin', password: 'admin123', fullName: 'Admin' },
-        { id: 2, role: 'nongdan', username: 'nongdan1', password: 'pass123', fullName: 'Nông dân 1' },
-        { id: 3, role: 'nongdan', username: 'nongdan2', password: 'pass123', fullName: 'Nông dân 2' },
+        { id: 2, role: 'nongdan', username: 'nongdan1', password: 'pass123', fullName: 'Nông dân 1', maNong: 'ND001' },
+        { id: 3, role: 'nongdan', username: 'nongdan2', password: 'pass123', fullName: 'Nông dân 2', maNong: 'ND002' },
         { id: 4, role: 'daily', username: 'daily1', password: 'pass123', fullName: 'Đại lý 1', maDaiLy: 'DL001' },
         { id: 5, role: 'daily', username: 'daily2', password: 'pass123', fullName: 'Đại lý 2', maDaiLy: 'DL002' },
         { id: 6, role: 'sieuthi', username: 'sieuthi1', password: 'pass123', fullName: 'Siêu thị 1' },

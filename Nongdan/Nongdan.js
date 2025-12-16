@@ -45,6 +45,11 @@ function loadDB() {
     DB.farms = loadUserData('farms');
     DB.batches = loadUserData('batches');
     DB.orders = loadUserData('orders');
+    // load market orders targeted to this farmer (shared global)
+    try {
+        const allMarket = JSON.parse(localStorage.getItem('market_orders') || '[]');
+        DB.marketOrders = allMarket.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
+    } catch (e) { DB.marketOrders = []; }
 }
 
 function saveDB() {
@@ -57,7 +62,8 @@ function saveDB() {
 
 function renderKPIs() {
     const displayName = currentUser?.fullName || 'Nông dân';
-    document.querySelector('.sidebar-header span').textContent = displayName;
+    const nameEl = document.querySelector('.sidebar-header span') || document.getElementById('current-user');
+    if (nameEl) nameEl.textContent = displayName;
     document.getElementById('kpi-farms').textContent = DB.farms.length;
     document.getElementById('kpi-batches').textContent = DB.batches.length;
     document.getElementById('kpi-orders').textContent = DB.orders.length;
@@ -130,6 +136,93 @@ function renderKhoXuat() {
         tbody.appendChild(tr);
     });
 }
+
+function renderIncomingOrders() {
+    const tbody = document.querySelector('#table-incoming-orders tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    const incoming = Array.isArray(DB.marketOrders) ? DB.marketOrders : [];
+    incoming.forEach(m => {
+        const tr = document.createElement('tr');
+        const dailyName = (m.fromDailyUserId) ? (function(){
+            const users = JSON.parse(localStorage.getItem('users')||'[]');
+            const u = users.find(x => String(x.id) === String(m.fromDailyUserId));
+            return u ? (u.fullName || u.hoTen || u.username) : (m.fromDailyUserId || 'Đại lý');
+        })() : 'Đại lý';
+        const status = m.status || 'pending';
+        let actions = '';
+        if (status === 'pending') {
+            actions = `<button class="btn small" onclick="confirmIncomingOrder('${m.maPhieu}')">Xác nhận</button>`;
+        } else if (status === 'preparing') {
+            actions = `<button class="btn small" onclick="openShipModal('${m.maPhieu}')">Xuất đơn</button>`;
+        } else if (status === 'shipped') {
+            actions = `<span>Đã xuất</span>`;
+        } else if (status === 'received') {
+            actions = `<span>Đã nhận bởi Đại lý</span>`;
+        }
+
+        tr.innerHTML = `<td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${dailyName}</td><td>${(m.ngayTao||'')}</td><td>${status}</td><td>${actions}</td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+window.confirmIncomingOrder = function(maPhieu) {
+    const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
+    const ord = all.find(x => x.maPhieu === maPhieu && String(x.toFarmerUserId) === String(currentUser?.id));
+    if (!ord) return alert('Không tìm thấy đơn');
+    ord.status = 'preparing';
+    localStorage.setItem('market_orders', JSON.stringify(all));
+    // reload local view
+    DB.marketOrders = all.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
+    renderIncomingOrders();
+    alert('Đã xác nhận nhận đơn, đang chuẩn bị.');
+};
+
+window.openShipModal = function(maPhieu) {
+    openModal(`
+        <h3>Xuất đơn</h3>
+        <label>Ngày gửi</label><input id="ship-date" type="date" />
+        <label>Ghi chú</label><input id="ship-note" />
+        <div style="margin-top:10px"><button onclick="shipIncomingOrder('${maPhieu}')" class="btn">Xuất</button> <button onclick="closeModal()" class="btn">Hủy</button></div>
+    `);
+};
+
+window.shipIncomingOrder = function(maPhieu) {
+    const date = document.getElementById('ship-date')?.value || new Date().toLocaleDateString();
+    const note = document.getElementById('ship-note')?.value || '';
+    const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
+    const ord = all.find(x => x.maPhieu === maPhieu && String(x.toFarmerUserId) === String(currentUser?.id));
+    if (!ord) return alert('Không tìm thấy đơn');
+    ord.status = 'shipped';
+    ord.shipInfo = { ngayGui: date, note };
+    localStorage.setItem('market_orders', JSON.stringify(all));
+    // Decrease stock for the shipped batch both in per-user DB and shared lohang
+    try {
+        const shippedQty = parseFloat(ord.soLuong) || 0;
+        // decrease in per-user DB.batches if maLo matches a batch id
+        const batch = DB.batches.find(b => String(b.id) === String(ord.maLo) || String(b.id) === String(ord.maLo));
+        if (batch) {
+            batch.quantity = Math.max(0, (parseFloat(batch.quantity) || 0) - shippedQty);
+        }
+        // decrease in shared lohang
+        const allLohang = JSON.parse(localStorage.getItem('lohang') || '[]');
+        const lo = allLohang.find(l => String(l.maLo) === String(ord.maLo));
+        if (lo) {
+            lo.soLuong = Math.max(0, (parseFloat(lo.soLuong) || 0) - shippedQty);
+        }
+        // persist changes
+        localStorage.setItem('lohang', JSON.stringify(allLohang));
+        saveDB();
+    } catch (e) { console.warn('Error adjusting stock on ship', e); }
+
+    DB.marketOrders = all.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
+    renderIncomingOrders();
+    renderBatches();
+    renderKhoNhap();
+    renderReports();
+    closeModal();
+    alert('Đã xuất đơn và chuyển cho Đại lý. Số lượng trong lô đã được cập nhật.');
+};
 
 function renderReports() {
     const totalProduction = DB.batches.reduce((sum, b) => sum + (parseFloat(b.quantity) || 0), 0);
@@ -230,7 +323,7 @@ window.deleteFarm = function(id) {
 
 /* ---------- Batches Management ---------- */
 
-document.getElementById('btn-new-batch')?.addEventListener('click', () => {
+document.querySelectorAll('#btn-new-batch').forEach(btn => btn.addEventListener('click', () => {
     const farmOptions = DB.farms.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
     openModal(`
         <h3>Đăng ký lô sản phẩm</h3>
@@ -245,7 +338,7 @@ document.getElementById('btn-new-batch')?.addEventListener('click', () => {
             <button onclick="closeModal()" class="btn" style="background:#ccc;color:#333;">Hủy</button>
         </div>
     `);
-});
+}));
 
 window.saveBatch = function(id = null) {
     const farmId = document.getElementById('batch-farm').value;
@@ -260,8 +353,30 @@ window.saveBatch = function(id = null) {
     if (id) {
         const batch = DB.batches.find(b => b.id === id);
         if (batch) { batch.farmId = farmId; batch.farmName = farm.name; batch.product = product; batch.quantity = qty; batch.harvest = harvest; batch.expiry = expiry; }
+        // also update shared lohang (global) so others (Daily) can see this batch
+        try {
+            const all = JSON.parse(localStorage.getItem('lohang') || '[]');
+            const lo = all.find(x => String(x.maLo) === String(id));
+            if (lo) {
+                lo.sanPham = product;
+                lo.maNong = currentUser?.maNong || currentUser?.id || lo.maNong;
+                lo.soLuong = qty;
+                lo.ngayTao = harvest;
+                lo.hanDung = expiry;
+            } else {
+                all.push({ maLo: id, sanPham: product, maNong: currentUser?.maNong || currentUser?.id || '', soLuong: qty, ngayTao: harvest, hanDung: expiry });
+            }
+            localStorage.setItem('lohang', JSON.stringify(all));
+        } catch (e) { /* ignore */ }
     } else {
-        DB.batches.push({ id: 'B' + Date.now(), farmId, farmName: farm.name, product, quantity: qty, harvest, expiry });
+        const newId = 'B' + Date.now();
+        DB.batches.push({ id: newId, farmId, farmName: farm.name, product, quantity: qty, harvest, expiry });
+        // also add to shared lohang so Daily can suggest this product
+        try {
+            const all = JSON.parse(localStorage.getItem('lohang') || '[]');
+            all.push({ maLo: newId, sanPham: product, maNong: currentUser?.maNong || currentUser?.id || '', soLuong: qty, ngayTao: harvest, hanDung: expiry });
+            localStorage.setItem('lohang', JSON.stringify(all));
+        } catch (e) { /* ignore */ }
     }
     saveDB();
     renderBatches();
@@ -296,6 +411,12 @@ window.deleteBatch = function(id) {
         renderBatches();
         renderKPIs();
         renderReports();
+        // remove from shared lohang as well
+        try {
+            const all = JSON.parse(localStorage.getItem('lohang') || '[]');
+            const remaining = all.filter(x => String(x.maLo) !== String(id));
+            localStorage.setItem('lohang', JSON.stringify(remaining));
+        } catch (e) { /* ignore */ }
     }
 };
 
@@ -374,6 +495,7 @@ function refreshAll() {
     renderFarms();
     renderBatches();
     renderOrders();
+    renderIncomingOrders();
     renderKhoNhap();
     renderKhoXuat();
     renderKPIs();
