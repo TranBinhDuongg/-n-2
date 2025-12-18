@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quản lý Đơn hàng Hàng Ngày - Daily</title>
+    <title>Đại lý</title>
     <link rel="stylesheet" href="Daily.css">
     <script src="Daily.js" defer></script>
 </head>
@@ -17,7 +17,7 @@
         </div>
         <ul class="sidebar-menu">
             <li><a href="#" class="menu-link active" data-section="dashboard"><span>Bảng điều khiển</span></a></li>
-            <li><a href="#" class="menu-link" data-section="orders"><span>Quản lý Đơn hàng</span></a></li>
+            <li><a href="#" class="menu-link" data-section="orders"><span>Quản lý đơn hàng</span></a></li>
             <li><a href="#" class="menu-link" data-section="inventory"><span>Quản lý Kho</span></a></li>
             <li><a href="#" class="menu-link" data-section="quality"><span>Kiểm định Chất lượng</span></a></li>
             <li><a href="#" class="menu-link" data-section="reports"><span>Báo cáo thống kê</span></a></li>
@@ -34,7 +34,6 @@
                 <h2>Bảng điều khiển</h2>
                 <div class="header-actions">
                     <button id="btn-new-order" class="btn">+ Nhập hàng</button>
-                    <button id="btn-new-shipment" class="btn">+ Xuất hàng</button>
                 </div>
             </div>
 
@@ -43,10 +42,7 @@
                     <h3 id="kpi-orders">0</h3>
                     <p>Phiếu nhập</p>
                 </div>
-                <div class="kpi">
-                    <h3 id="kpi-shipments">0</h3>
-                    <p>Phiếu xuất</p>
-                </div>
+                <!-- Shipments KPI removed -->
                 <div class="kpi">
                     <h3 id="kpi-inventory">0</h3>
                     <p>Kho hàng</p>
@@ -75,17 +71,35 @@
             </div>
         </section>
 
-        <!-- Orders -->
+        <!-- Orders: unified page with internal toggle between Import receipts and Retail orders -->
         <section id="orders" class="page">
             <div class="page-header">
-                <h2>Nhập hàng</h2>
-                <button id="btn-create-order" class="btn">+ Nhập hàng mới</button>
+                <h2>Quản lý Đơn hàng</h2>
+                <button id="btn-create-order" class="btn">+ Tạo phiếu nhập</button>
             </div>
-            <table id="table-orders-all" class="table">
-                <thead><tr><th>MãPhiếu</th><th>MãLô — Sản phẩm</th><th>SốLượng</th><th>Nông dân</th><th>KhoNhập</th><th>NgàyNhập</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
-                <tbody></tbody>
-            </table>
+
+            <div class="orders-toggle" style="margin:10px 0;display:flex;gap:8px;">
+                <button id="tab-orders-import" class="btn small active">Nhập hàng</button>
+                <button id="tab-orders-retail" class="btn small">Xuất hàng</button>
+            </div>
+
+            <div id="orders-import" class="orders-panel">
+                <table id="table-orders-all" class="table">
+                    <thead><tr><th>MãPhiếu</th><th>MãLô — Sản phẩm</th><th>SốLượng</th><th>Nông dân</th><th>KhoNhập</th><th>NgàyNhập</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div id="orders-retail" class="orders-panel" style="display:none;">
+                <h4>Đơn hàng từ Siêu thị</h4>
+                <table id="table-retail-incoming" class="table">
+                    <thead><tr><th>MãPhiếu</th><th>MãLô — Sản phẩm</th><th>SốLượng</th><th>Siêu thị</th><th>Ngày tạo</th><th>Trạng thái</th><th>Hành động</th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </section>
+
+        <!-- Xuất hàng page removed (internal kho export feature deleted) -->
 
         <!-- Inventory -->
         <section id="inventory" class="page">
@@ -93,11 +107,7 @@
                 <h2>Quản lý Kho</h2>
             </div>
             
-            <!-- Tab buttons -->
-            <div style="margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; display: flex; gap: 12px;">
-                <button id="tab-nhap-hang" class="btn tab-btn active" style="background: transparent; color: #1a472a; border: none; border-bottom: 3px solid #4CAF50; padding: 12px 16px; margin-bottom: -2px;">Nhập hàng</button>
-                <button id="tab-xuat-hang" class="btn tab-btn" style="background: transparent; color: #1a472a; border: none; padding: 12px 16px; margin-bottom: -2px;">Xuất hàng</button>
-            </div>
+            <!-- Tab buttons removed (import/export toggle) -->
 
             <!-- Nhập hàng (Import) -->
             <div id="content-nhap-hang" class="tab-content" style="display: block;">
@@ -123,19 +133,7 @@
                 </div>
             </div>
 
-            <!-- Xuất hàng (Export) - Tạm thời bỏ trống -->
-            <div id="content-xuat-hang" class="tab-content" style="display: none;">
-                <div class="page-header" style="margin-bottom: 16px;">
-                    <div></div>
-                    <button id="btn-add-xuat-hang" class="btn" disabled>+ Thêm phiếu xuất (Đang phát triển)</button>
-                </div>
-                <div class="lists">
-                    <div class="list" style="grid-column: 1/-1;">
-                        <h4>Danh sách phiếu xuất hàng</h4>
-                        <p style="color: #999; text-align: center; padding: 20px;">Chức năng xuất hàng đang được phát triển...</p>
-                    </div>
-                </div>
-            </div>
+            <!-- Internal export UI removed -->
         </section>
 
         <!-- Quality -->

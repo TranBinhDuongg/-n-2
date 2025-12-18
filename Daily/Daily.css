@@ -225,6 +225,34 @@ body {
 	font-size: 12px;
 }
 
+/* Orders toggle (tab-like) styling */
+
+.orders-toggle {
+	display: inline-flex;
+	gap: 6px;
+	background: transparent;
+	padding: 4px;
+	border-radius: 10px;
+}
+.orders-toggle .btn.small {
+	background: transparent;
+	color: var(--muted);
+	border: 1px solid rgba(0,0,0,0.04);
+	padding: 8px 14px;
+	border-radius: 8px;
+	transition: all 0.18s ease;
+}
+.orders-toggle .btn.small:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+.orders-toggle .btn.small.active {
+	background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+	color: #fff;
+	border-color: transparent;
+	box-shadow: 0 6px 18px rgba(59, 120, 66, 0.18);
+}
+
 .btn.cancel {
 	background: #9e9e9e;
 }

@@ -35,7 +35,6 @@ const DB = {
     lohang: JSON.parse(localStorage.getItem('lohang') || '[]'),        
     phieuNhap: [],  // Will be loaded per-user
     kho: [],        // Will be loaded per-user
-    phieuXuat: [],  // Will be loaded per-user
     kiemDinh: [],   // Will be loaded per-user
     dailyAgencies: JSON.parse(localStorage.getItem('dailyAgencies') || '[]'), // Shared
 };
@@ -43,14 +42,13 @@ const DB = {
 function loadDB() {
     DB.phieuNhap = loadUserData('phieuNhap');
     DB.kho = loadUserData('kho');
-    DB.phieuXuat = loadUserData('phieuXuat');
     DB.kiemDinh = loadUserData('kiemDinh');
 }
 
 // Clear old non-per-user data that may have been stored with old format
 function clearOldDataFormat() {
     // Remove old keys that don't follow per-user format
-    const oldKeys = ['phieuNhap', 'kho', 'phieuXuat', 'kiemDinh'];
+    const oldKeys = ['phieuNhap', 'kho', 'kiemDinh'];
     oldKeys.forEach(key => {
         // Only clear if it looks like old shared format (not per-user)
         const value = localStorage.getItem(key);
@@ -72,7 +70,6 @@ function saveDB() {
     // Save per-user data with user_${id}_ prefix
     saveUserData('phieuNhap', DB.phieuNhap);
     saveUserData('kho', DB.kho);
-    saveUserData('phieuXuat', DB.phieuXuat);
     saveUserData('kiemDinh', DB.kiemDinh);
     
     // Save shared data globally
@@ -88,6 +85,22 @@ function getKhoName(maKho) {
     return kho ? kho.tenKho : maKho;
 }
 
+// Helper: interpret quality result as pass
+function isKiemDinhPassed(kq) {
+    if (!kq) return false;
+    const v = String(kq).trim().toLowerCase();
+    // remove diacritics to compare base letters
+    const base = v.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    return base === 'dat' || base === 'pass' || base === 'passed' || base.includes('dat') || base.includes('pass');
+}
+
+function isStatusPending(s) {
+    if (!s) return false;
+    const v = String(s).trim().toLowerCase();
+    const base = v.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    return base.includes('cho') || base.includes('pending') || base.includes('kiem');
+}
+
 // Render reports (statistics) based on current DB state
 function renderReports() {
     // ensure DOM elements exist
@@ -96,20 +109,27 @@ function renderReports() {
     const elShipped = document.getElementById('report-shipped');
     const elStock = document.getElementById('report-stock');
     const elQuality = document.getElementById('report-quality');
-
-    // compute totals
-    const totalProduction = (DB.lohang || []).reduce((s, b) => s + (parseFloat(b.soLuong) || 0), 0);
+    // compute totals similar to Nongdan reports
     const totalReceived = (DB.phieuNhap || []).reduce((s, r) => s + (parseFloat(r.soLuong) || 0), 0);
-    const totalShipped = (DB.phieuXuat || []).reduce((s, x) => s + (parseFloat(x.soLuong) || 0), 0);
-    const inStock = totalReceived - totalShipped;
+    // shipped: count market orders that involve this daily (either sent from this daily or shipped to this daily)
+    let marketAll = [];
+    try { marketAll = JSON.parse(localStorage.getItem('market_orders') || '[]'); } catch (e) { marketAll = []; }
+    const shippedFromDaily = marketAll.filter(m => String(m.fromDailyUserId) === String(currentUser?.id) && (String(m.status).toLowerCase().includes('ship') || String(m.status).toLowerCase().includes('xuất') || String(m.status).toLowerCase().includes('shipped')))
+        .reduce((s, m) => s + (parseFloat(m.soLuong) || 0), 0);
+    const shippedToDaily = marketAll.filter(m => String(m.toDailyAgency) === String(currentUser?.maDaiLy) && (String(m.status).toLowerCase().includes('ship') || String(m.status).toLowerCase().includes('xuất') || String(m.status).toLowerCase().includes('shipped')))
+        .reduce((s, m) => s + (parseFloat(m.soLuong) || 0), 0);
+    const totalShipped = shippedFromDaily + shippedToDaily;
+
+    // current stock by batches
+    const totalStock = (DB.lohang || []).reduce((s, b) => s + (parseFloat(b.soLuong) || 0), 0);
 
     const totalChecks = (DB.kiemDinh || []).length;
-    const passed = (DB.kiemDinh || []).filter(k => (k.ketQua || '').toLowerCase() === 'đạt' || (k.ketQua || '').toLowerCase() === 'dat').length;
+    const passed = (DB.kiemDinh || []).filter(k => (k.ketQua || '').toLowerCase() === 'đạt' || (k.ketQua || '').toLowerCase() === 'dat' || (k.ketQua || '').toLowerCase().includes('dat')).length;
     const passPercent = totalChecks ? Math.round((passed / totalChecks) * 100) : 0;
 
     if (elOrders) elOrders.textContent = totalReceived + ' đơn vị';
     if (elShipped) elShipped.textContent = totalShipped + ' đơn vị';
-    if (elStock) elStock.textContent = inStock + ' đơn vị';
+    if (elStock) elStock.textContent = totalStock + ' đơn vị';
     if (elQuality) elQuality.textContent = `${passed}/${totalChecks} (${passPercent}%)`;
 }
 
@@ -140,7 +160,7 @@ function seedSampleData() {
             { maLo: 'LO1002', sanPham: 'Rau sạch', maNong: 'ND002', soLuong: 200, ngayTao: '2025-11-15', hanDung: '2025-12-15' }
         ];
         changed = true;
-    }
+    }  
 
     // Seed per-user data based on currentUser.id
     if (DB.kho.length === 0) {
@@ -156,7 +176,7 @@ function seedSampleData() {
         }
         changed = true;
     }
-
+  
     if (DB.phieuNhap.length === 0) {
         if (currentUser?.maDaiLy === 'DL001') {
             DB.phieuNhap = [
@@ -185,19 +205,7 @@ function seedSampleData() {
         changed = true;
     }
 
-    if (DB.phieuXuat.length === 0) {
-        if (currentUser?.maDaiLy === 'DL001') {
-            DB.phieuXuat = [
-                { maPhieuX: 'PX2025001', maKho: 'KHO001', maNong: 'ND001', soLuong: 20, ngayXuat: '2025-11-28', ghiChu: 'Giao siêu thị' },
-                { maPhieuX: 'PX2025002', maKho: 'KHO002', maNong: 'ND002', soLuong: 30, ngayXuat: '2025-11-29', ghiChu: 'Giao khách lẻ' }
-            ];
-        } else if (currentUser?.maDaiLy === 'DL002') {
-            DB.phieuXuat = [
-                { maPhieuX: 'PX2025003', maKho: 'KHO003', maNong: 'ND001', soLuong: 50, ngayXuat: '2025-11-30', ghiChu: 'Giao siêu thị HCM' }
-            ];
-        }
-        changed = true;
-    }
+    
 
     if (changed) saveDB();
 }
@@ -593,23 +601,7 @@ document.getElementById('btn-add-nhap-hang')?.addEventListener('click', () => {
 });
 
 // Tab handling for Inventory page
-document.getElementById('tab-nhap-hang')?.addEventListener('click', function() {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.style.borderBottom = '');
-    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
-    
-    this.style.borderBottom = '3px solid #4CAF50';
-    this.style.color = '#4CAF50';
-    document.getElementById('content-nhap-hang').style.display = 'block';
-});
-
-document.getElementById('tab-xuat-hang')?.addEventListener('click', function() {
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.style.borderBottom = '');
-    document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
-    
-    this.style.borderBottom = '3px solid #4CAF50';
-    this.style.color = '#4CAF50';
-    document.getElementById('content-xuat-hang').style.display = 'block';
-});
+// Import/Export tab switch removed — content displays are controlled by page navigation now.
 
 // ------------------ Quality (Kiểm định) Management ------------------
 // create DB.kiemDinh if not present
@@ -631,7 +623,43 @@ function saveKiemDinh(existingId = null) {
     } else {
         DB.kiemDinh.push({ maKiemDinh, maLo, ngayKiem, nguoiKiem, ketQua, ghiChu });
     }
+    // persist
     saveDB();
+
+    // If this quality check passed, only then increase stock for receipts linked to this batch
+    const passed = isKiemDinhPassed(ketQua);
+    const savedKD = DB.kiemDinh.find(x => x.maKiemDinh === maKiemDinh) || DB.kiemDinh[DB.kiemDinh.length - 1];
+
+    // Find related receipts more robustly: match by maLo and pending-like status (accent-insensitive)
+    let related = (DB.phieuNhap || []).filter(p => String(p.maLo) === String(maLo) && isStatusPending(p.status));
+    // fallback: if none found by maLo, try to find any pending receipts for same maLo ignoring status wording
+    if ((related || []).length === 0) {
+        related = (DB.phieuNhap || []).filter(p => String(p.maLo) === String(maLo));
+    }
+
+    console.log('saveKiemDinh:', { maKiemDinh, maLo, ketQua, passed, relatedCount: (related || []).length });
+
+    if (passed) {
+        if (!related || related.length === 0) {
+            console.warn('No related pending receipts found for maLo', maLo);
+        }
+        related.forEach(r => {
+            const qty = parseFloat(r.soLuong) || 0;
+            console.log('Applying stock increase for receipt', r.maPhieu, 'maLo', r.maLo, 'qty', qty);
+            adjustStockOnReceipt(r, qty);
+            r.status = 'Đã kiểm định';
+        });
+        saveDB();
+        // refresh UI
+        try { renderReceiptsFromDB(); } catch (e) {}
+        try { renderInventory(); } catch (e) {}
+        try { updateKPIs(); } catch (e) {}
+    } else {
+        related.forEach(r => { r.status = 'Không đạt - Chờ xử lý'; });
+        saveDB();
+        try { renderReceiptsFromDB(); } catch (e) {}
+    }
+
     renderKiemDinh();
     closeModal();
 }
@@ -643,7 +671,7 @@ function renderKiemDinh() {
     (DB.kiemDinh || []).forEach(k => {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${k.maKiemDinh}</td><td>${k.maLo}</td><td>${k.ngayKiem}</td><td>${k.nguoiKiem}</td><td>${k.ketQua}</td><td>${k.ghiChu || ''}</td>
-            <td><button class="btn small" onclick="editKiemDinh('${k.maKiemDinh}')">Sửa</button>
+            <td><button class="btn small" onclick="editKiemDinh('${k.maKiemDinh}')">Kiểm định</button>
                 <button class="btn small" onclick="deleteKiemDinh('${k.maKiemDinh}')">Xóa</button></td>`;
         tbody.appendChild(tr);
     });
@@ -684,6 +712,9 @@ document.getElementById('btn-create-quality')?.addEventListener('click', () => {
 document.querySelectorAll('#btn-create-order, #btn-new-order').forEach(btn => {
     btn?.addEventListener('click', () => openModalWithTemplate('create-order-template'));
 });
+
+// dashboard "Xuất hàng" quick button -> open export modal
+// dashboard shipment quick button removed (export feature deleted)
 
 // handle cancel inside injected form
 document.addEventListener('click', (e) => {
@@ -742,6 +773,8 @@ function addOrderRow(tableSelector, data) {
     });
 }
 
+// Export feature removed: phieuXuat and related UI/handlers were deleted per request.
+
 // Handle form submit for the modal create order form (delegated)
 // Saves data according to SQL schema: PhiếuNhậpHàng (Receipt)
 document.addEventListener('submit', (e) => {
@@ -775,14 +808,11 @@ document.addEventListener('submit', (e) => {
             khoNhap: f.get('toAddress') || '',                        // KhoNhập (warehouse address)
             ngayNhap: f.get('date') || new Date().toLocaleDateString(),  // NgàyNhập
             ghiChu: f.get('ghichu') || '',                             // GhiChú (notes)
-            status: 'Đã tạo'                                          // Additional status field
+            status: 'Mới tạo'                                    // new receipt created
         };
 
-        // Save to DB and localStorage
-        // Save to DB and update stock
+        // Save to DB and localStorage (do NOT add to inventory until inspection passes)
         DB.phieuNhap.push(receipt);
-        // increase stock for the batch (lohang)
-        adjustStockOnReceipt(receipt, receipt.soLuong);
         saveDB();
 
         // Add to main orders table and dashboard recent orders table
@@ -804,7 +834,7 @@ document.addEventListener('submit', (e) => {
             kpiEl.textContent = v + 1;
         }
 
-        // -- Notify farmer by writing a market order into shared storage --
+        // -- Notify farmer by writing a market order into shared storage (auto-send) --
         try {
             const market = JSON.parse(localStorage.getItem('market_orders') || '[]');
             const uid = 'MO' + Date.now() + Math.random().toString(36).slice(2,8);
@@ -825,6 +855,7 @@ document.addEventListener('submit', (e) => {
 
         closeModal();
         alert('Đã nhập hàng: ' + receipt.maPhieu);
+        try { renderReports(); } catch (e) { /* ignore */ }
     }
 });
 
@@ -879,6 +910,80 @@ window.markMarketOrderReceived = function(maPhieu) {
     try { renderReceiptsFromDB(); } catch (e) {}
     try { renderKiemDinh(); } catch (e) {}
     try { loadMarketOrdersForDaily(); } catch (e) {}
+    try { renderReports(); } catch (e) {}
+};
+
+// ------------ Retail orders from Supermarkets (Sieuthi -> Daily) ------------
+function loadRetailOrdersForDaily() {
+    try {
+        const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+        const mine = all.filter(m => String(m.toDailyAgency) === String(currentUser?.maDaiLy));
+        const tb = document.querySelector('#table-retail-incoming tbody');
+        // the retail-incoming table was removed from Nhập hàng page; if not present, skip rendering
+        if (!tb) return;
+        tb.innerHTML = '';
+        mine.forEach(m => {
+            const tr = document.createElement('tr');
+            const shopName = (function(){ try { const users = JSON.parse(localStorage.getItem('users')||'[]'); const u = users.find(x=>String(x.id)===String(m.fromSieuthiId)); return u ? (u.fullName||u.username) : (m.fromSieuthiId||'Siêu thị'); } catch(e){ return m.fromSieuthiId || 'Siêu thị'; } })();
+            tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${shopName}</td><td>${m.ngayTao || ''}</td><td>${m.status || 'pending'}</td>`;
+            const td = document.createElement('td');
+            if (m.status === 'pending') {
+                td.innerHTML = `<button class="btn small" onclick="confirmRetailOrder('${m.uid}')">Xác nhận</button>`;
+            } else {
+                // Do not render a "Xuất đơn" action here — xuất hàng từ Đại lý đến Siêu thị đã bị vô hiệu hóa
+                td.innerHTML = `<span>${m.status || ''}</span>`;
+            }
+            tr.appendChild(td);
+            tb.appendChild(tr);
+        });
+    } catch (e) { console.warn('loadRetailOrdersForDaily failed', e); }
+}
+
+window.confirmRetailOrder = function(uid) {
+    try {
+        const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+        const idx = all.findIndex(x => String(x.uid) === String(uid) && String(x.toDailyAgency) === String(currentUser?.maDaiLy));
+        if (idx === -1) return alert('Không tìm thấy đơn');
+        all[idx].status = 'preparing';
+        localStorage.setItem('retail_orders', JSON.stringify(all));
+        loadRetailOrdersForDaily();
+        alert('Đã xác nhận nhận đơn, đang chuẩn bị.');
+    } catch (e) { console.warn(e); }
+};
+
+window.openShipRetailModal = function(uid) {
+    openModal(`<h3>Xuất đơn (Đến Siêu thị)</h3>
+        <label>Ngày gửi</label><input id="ship-date" type="date" />
+        <label>Ghi chú</label><input id="ship-note" />
+        <div style="margin-top:10px"><button onclick="shipRetailOrder('${uid}')" class="btn">Xuất</button> <button onclick="closeModal()" class="btn">Hủy</button></div>`);
+};
+
+window.shipRetailOrder = function(uid) {
+    try {
+        const date = document.getElementById('ship-date')?.value || new Date().toLocaleDateString();
+        const note = document.getElementById('ship-note')?.value || '';
+        const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+        const idx = all.findIndex(x => String(x.uid) === String(uid) && String(x.toDailyAgency) === String(currentUser?.maDaiLy));
+        if (idx === -1) return alert('Không tìm thấy đơn');
+        const ord = all[idx];
+        ord.status = 'shipped';
+        ord.shipInfo = { ngayGui: date, note };
+
+        // decrease shared lohang if possible
+        try {
+            const shippedQty = parseFloat(ord.soLuong) || 0;
+            const allLohang = JSON.parse(localStorage.getItem('lohang') || '[]');
+            let lo = allLohang.find(l => String(l.maLo) === String(ord.maLo));
+            if (!lo) lo = allLohang.find(l => String(l.sanPham) === String(ord.sanPham) && (parseFloat(l.soLuong)||0) >= shippedQty);
+            if (lo) { lo.soLuong = Math.max(0, (parseFloat(lo.soLuong)||0) - shippedQty); }
+            localStorage.setItem('lohang', JSON.stringify(allLohang));
+        } catch (e) { console.warn('reduce lohang failed', e); }
+
+        localStorage.setItem('retail_orders', JSON.stringify(all));
+        closeModal();
+        loadRetailOrdersForDaily();
+        alert('Đã xuất đơn và chuyển cho Siêu thị.');
+    } catch (e) { console.warn(e); alert('Lỗi khi xuất đơn'); }
 };
 
 // Form Submissions
@@ -968,6 +1073,55 @@ window.addEventListener('DOMContentLoaded', () => {
     updateKPIs();
     // Load any market orders that have been shipped to this daily so they can confirm receipt
     try { loadMarketOrdersForDaily(); } catch (e) { /* ignore */ }
+    // Load incoming retail orders from supermarkets
+    try { loadRetailOrdersForDaily(); } catch (e) { /* ignore */ }
+    // Initialize Orders toggle controls if present
+    try {
+        const tabImport = document.getElementById('tab-orders-import');
+        const tabRetail = document.getElementById('tab-orders-retail');
+        const panelImport = document.getElementById('orders-import');
+        const panelRetail = document.getElementById('orders-retail');
+        function showOrdersTab(t) {
+            if (!panelImport || !panelRetail || !tabImport || !tabRetail) return;
+            if (t === 'retail') {
+                panelImport.style.display = 'none';
+                panelRetail.style.display = '';
+                tabImport.classList.remove('active');
+                tabRetail.classList.add('active');
+                // render retail list when switching
+                try { loadRetailOrdersForDaily(); } catch (e) {}
+            } else {
+                panelImport.style.display = '';
+                panelRetail.style.display = 'none';
+                tabImport.classList.add('active');
+                tabRetail.classList.remove('active');
+                // ensure receipts are rendered
+                try { renderReceiptsFromDB(); } catch (e) {}
+            }
+        }
+        tabImport?.addEventListener('click', () => showOrdersTab('import'));
+        tabRetail?.addEventListener('click', () => showOrdersTab('retail'));
+        // default to import tab
+        showOrdersTab('import');
+        // Listen for storage changes to refresh views (from other windows)
+        window.addEventListener('storage', (ev) => {
+            try {
+                if (!ev.key) return;
+                // refresh when shared keys or this user's per-user keys change
+                const keysToWatch = ['market_orders','retail_orders', 'lohang', `user_${currentUser?.id}_phieuNhap`, `user_${currentUser?.id}_kiemDinh`];
+                if (keysToWatch.includes(ev.key) || ev.key.includes('market_orders') || ev.key.includes('retail_orders') || ev.key.includes('lohang')) {
+                    try { loadDB(); } catch (e) {}
+                    try { renderReceiptsFromDB(); } catch (e) {}
+                    try { renderKho(); } catch (e) {}
+                    try { renderInventory(); } catch (e) {}
+                    try { renderKiemDinh(); } catch (e) {}
+                    try { updateKPIs(); } catch (e) {}
+                    try { renderReports(); } catch (e) {}
+                    try { loadRetailOrdersForDaily(); } catch (e) {}
+                }
+            } catch (err) { console.warn('storage listener error', err); }
+        });
+    } catch (e) { console.warn('Orders toggle init failed', e); }
 });
 
 function renderReceiptsFromDB() {
@@ -1032,6 +1186,7 @@ function updateKPIs() {
     if (kpiOrders) {
         kpiOrders.textContent = (DB.phieuNhap || []).length;
     }
+    // Shipments KPI removed (phieuXuat deleted)
 }
 
 console.log('Daily Management System loaded successfully!');

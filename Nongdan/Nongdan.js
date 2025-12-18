@@ -154,7 +154,8 @@ function renderIncomingOrders() {
         const idKey = m.uid || m.maPhieu;
         if (status === 'pending') {
             actions = `<button class="btn small" onclick="confirmIncomingOrder('${idKey}')">Xác nhận</button>`;
-        } else if (status === 'preparing') {
+        } else if (status === 'preparing' || status === 'Nông dân nhận đơn') {
+            // when farmer has accepted the order show 'Xuất đơn' so they can ship to the Daily
             actions = `<button class="btn small" onclick="openShipModal('${idKey}')">Xuất đơn</button>`;
         } else if (status === 'shipped') {
             actions = `<span>Đã xuất</span>`;
@@ -174,7 +175,8 @@ window.confirmIncomingOrder = function(idKey) {
     const idx = all.findIndex(x => (String(x.uid) === String(idKey) || String(x.maPhieu) === String(idKey)) && String(x.toFarmerUserId) === String(currentUser?.id));
     console.debug('found index=', idx);
     if (idx === -1) return alert('Không tìm thấy đơn');
-    all[idx].status = 'preparing';
+    // mark that farmer accepted the order
+    all[idx].status = 'Nông dân nhận đơn';
     localStorage.setItem('market_orders', JSON.stringify(all));
     // reload local view
     DB.marketOrders = all.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
@@ -205,9 +207,54 @@ window.shipIncomingOrder = function(idKey) {
         return alert('Không tìm thấy đơn');
     }
     const ord = all[idx];
-    ord.status = 'shipped';
+    // mark as shipped and waiting for quality check
+    ord.status = 'Đang chờ kiểm định';
     ord.shipInfo = { ngayGui: date, note };
     localStorage.setItem('market_orders', JSON.stringify(all));
+    // Notify the target Daily: create a receipt (phieuNhap) and a kiemDinh entry
+    try {
+        const dailyId = ord.fromDailyUserId || ord.fromDaily || ord.toDailyUserId || ord.toDaily;
+            if (dailyId) {
+            // update per-user phieuNhap for the Daily if exists, otherwise create
+            const phieuKey = `user_${dailyId}_phieuNhap`;
+            const existingPhieu = JSON.parse(localStorage.getItem(phieuKey) || '[]');
+            const found = existingPhieu.find(p => String(p.maPhieu) === String(ord.maPhieu));
+            if (found) {
+                // update existing receipt status and fields
+                found.status = 'Đang chờ kiểm định';
+                found.maLo = ord.maLo || found.maLo;
+                found.sanPham = ord.sanPham || found.sanPham;
+                found.soLuong = parseFloat(ord.soLuong) || found.soLuong;
+                found.khoNhap = ord.khoNhap || found.khoNhap;
+                found.ghiChu = (found.ghiChu || '') + ' (Cập nhật: Nông dân đã giao)';
+            } else {
+                const newPhieu = {
+                    maPhieu: ord.maPhieu || `PN${Date.now()}`,
+                    maLo: ord.maLo || '',
+                    maNongUserId: currentUser?.id || '',
+                    tenNong: currentUser?.fullName || currentUser?.hoTen || '',
+                    sanPham: ord.sanPham || '',
+                    soLuong: parseFloat(ord.soLuong) || 0,
+                    khoNhap: ord.khoNhap || '',
+                    ngayNhap: new Date().toLocaleDateString(),
+                    ghiChu: 'Tạo tự động khi nông dân giao: ' + (ord.maPhieu || ''),
+                    status: 'Đang chờ kiểm định'
+                };
+                existingPhieu.push(newPhieu);
+            }
+            localStorage.setItem(phieuKey, JSON.stringify(existingPhieu));
+
+            // create per-user kiemDinh for the Daily if not exists for this maPhieu
+            const kdKey = `user_${dailyId}_kiemDinh`;
+            const existingKd = JSON.parse(localStorage.getItem(kdKey) || '[]');
+            const hasKd = existingKd.some(k => String(k.maLo) === String(ord.maLo) && (k.ghiChu||'').includes(ord.maPhieu));
+            if (!hasKd) {
+                const maKiemDinh = 'KD' + Date.now() + Math.random().toString(36).slice(2,5);
+                existingKd.push({ maKiemDinh, maLo: ord.maLo || '', ngayKiem: '', nguoiKiem: '', ketQua: 'Chưa kiểm', ghiChu: 'Tạo tự động sau khi nông dân giao: ' + (ord.maPhieu || '') });
+                localStorage.setItem(kdKey, JSON.stringify(existingKd));
+            }
+        }
+    } catch (e) { console.warn('notify daily creation failed', e); }
     // Decrease stock for the shipped batch both in per-user DB and shared lohang
     try {
         const shippedQty = parseFloat(ord.soLuong) || 0;

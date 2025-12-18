@@ -30,31 +30,27 @@ function saveUserData(key, data) {
     localStorage.setItem(storageKey, JSON.stringify(data));
 }
 
-// Database
+// Database (simplified for new supermarket app)
 const DB = {
-    phieuNhap: [],
-    kho: [],
-    kiemDinh: [],
-    lohang: JSON.parse(localStorage.getItem('lohang') || '[]'),
-    nongdan: JSON.parse(localStorage.getItem('nongdan') || '[]')
+    orders: loadUserData('orders') || [],       // orders created by this supermarket
+    kho: loadUserData('kho') || [],             // supermarket's warehouses
+    lohang: loadUserData('lohang') || [],       // per-supermarket batches
+    kiemDinh: loadUserData('kiemDinh') || []    // per-supermarket quality checks
 };
 
 function loadDB() {
-    DB.phieuNhap = loadUserData('phieuNhap');
-    DB.kho = loadUserData('kho');
-    DB.kiemDinh = loadUserData('kiemDinh');
+    DB.orders = loadUserData('orders') || [];
+    DB.kho = loadUserData('kho') || [];
+    DB.lohang = loadUserData('lohang') || [];
+    DB.kiemDinh = loadUserData('kiemDinh') || [];
 }
 
 function saveDB() {
-    saveUserData('phieuNhap', DB.phieuNhap);
-    saveUserData('kho', DB.kho);
-    saveUserData('kiemDinh', DB.kiemDinh);
-    localStorage.setItem('lohang', JSON.stringify(DB.lohang));
-    localStorage.setItem('nongdan', JSON.stringify(DB.nongdan));
+    saveUserData('orders', DB.orders || []);
+    saveUserData('kho', DB.kho || []);
+    saveUserData('lohang', DB.lohang || []);
+    saveUserData('kiemDinh', DB.kiemDinh || []);
 }
-
-
-
 // Get or create modal (nếu không có trong HTML thì tạo)
 let modal = document.getElementById('modal');
 let modalBody = document.getElementById('modal-body');
@@ -76,38 +72,75 @@ function renderTable(sel, data, fn) {
 }
 
 function renderAll() {
-    // Dashboard tables
-    renderTable('#table-orders', DB.phieuNhap.slice(-5), p => `
-        <td>${p.maPhieu}</td><td>${p.maLo}</td><td>${p.soLuong}</td><td>${p.khoNhap}</td><td>${p.ngayNhap}</td>`);
-    
-    renderTable('#table-quality-alerts', DB.kiemDinh.slice(-5), q => `
-        <td>${q.maKiemDinh}</td><td>${q.maLo}</td><td>${q.ngayKiem}</td><td>${q.ketQua}</td>`);
-    
-    // Orders page
-    renderTable('#table-orders-all', DB.phieuNhap, p => `
-        <td>${p.maPhieu}</td><td>${p.maLo}</td><td>${p.soLuong}</td>
-        <td>${p.tenNong}</td><td>${p.khoNhap}</td><td>${p.ngayNhap}</td>
-        <td><button onclick="editPhieu('${p.maPhieu}')">Sửa</button><button onclick="deletePhieu('${p.maPhieu}')">Xóa</button></td>`);
-    
-    // Inventory
-    renderTable('#table-kho', DB.kho, k => `
-        <td>${k.maKho}</td><td>${k.tenKho}</td><td>${k.diaChi}</td><td>${k.soDienThoai}</td>
-        <td><button onclick="editKho('${k.maKho}')">Sửa</button><button onclick="deleteKho('${k.maKho}')">Xóa</button></td>`);
-    
-    // Quality
-    renderTable('#table-quality', DB.kiemDinh, q => `
-        <td>${q.maKiemDinh}</td><td>${q.maLo}</td><td>${q.ngayKiem}</td>
-        <td>${q.ketQua}</td><td>${q.ghiChu}</td>
-        <td><button onclick="editQuality('${q.maKiemDinh}')">Sửa</button><button onclick="deleteQuality('${q.maKiemDinh}')">Xóa</button></td>`);
-    
-    // Update KPIs
-    const kpi = document.getElementById('kpi-orders');
-    if (kpi) kpi.textContent = DB.phieuNhap.length;
-    const kpi2 = document.getElementById('kpi-inventory');
-    if (kpi2) kpi2.textContent = DB.kho.length;
-    const kpi3 = document.getElementById('kpi-quality');
-    if (kpi3) kpi3.textContent = DB.kiemDinh.length;
+    renderOrders();
+    renderIncoming();
+    renderInventory();
+    renderReports();
 }
+
+function renderOrders() {
+    renderTable('#table-orders-all', DB.orders || [], o => `
+        <td>${o.maPhieu}</td><td>${o.sanPham}</td><td>${o.soLuong}</td><td>${o.toDaily || o.toDailyAgency || ''}</td><td>${o.ngayTao || ''}</td><td>${o.status || ''}</td>
+        <td>${o.status==='pending'?`<button onclick="cancelOrder('${o.uid}')">Hủy</button>`:''}</td>`);
+}
+
+function renderIncoming() {
+    try {
+        const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+        const mine = all.filter(m => (String(m.toSieuthiId) === String(currentUser?.id) || String(m.toSieuthi) === String(currentUser?.id) || String(m.toSieuthi) === String(currentUser?.fullName)));
+        renderTable('#table-incoming', mine, m => `
+            <td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham||''}</td><td>${m.soLuong}</td><td>${m.toDaily||''}</td><td>${m.ngayTao||''}</td><td>${m.status||''}</td>
+            <td>${m.status!=='received'?`<button onclick="markRetailOrderReceived('${m.uid}')">Đã nhận</button>`:''}</td>`);
+    } catch (e) { console.warn(e); }
+}
+
+function markRetailOrderReceived(uid) {
+    const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+    const idx = all.findIndex(x => x.uid === uid);
+    if (idx === -1) return;
+    all[idx].status = 'received';
+    localStorage.setItem('retail_orders', JSON.stringify(all));
+    const p = all[idx];
+    DB.lohang = DB.lohang || [];
+    DB.lohang.push({ maLo: p.maLo, sanPham: p.sanPham, soLuong: parseFloat(p.soLuong)||0, ngayTao: new Date().toLocaleString() });
+    saveDB();
+    renderAll();
+}
+
+function cancelOrder(uid) {
+    DB.orders = DB.orders || [];
+    const idx = DB.orders.findIndex(o => o.uid === uid);
+    if (idx !== -1) { DB.orders.splice(idx,1); saveDB(); }
+    const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+    const idx2 = all.findIndex(a => a.uid === uid);
+    if (idx2 !== -1) { all.splice(idx2,1); localStorage.setItem('retail_orders', JSON.stringify(all)); }
+    renderAll();
+}
+
+function renderReports() {
+    // nhập kho = total received from retail_orders addressed to this sieuthi
+    const allRetail = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+    const incoming = allRetail.filter(r => r.status === 'received' && (String(r.toSieuthiId) === String(currentUser?.id) || String(r.toSieuthi) === String(currentUser?.id) || String(r.toSieuthi) === String(currentUser?.fullName))).reduce((s,r)=>s+(parseFloat(r.soLuong)||0),0);
+    // tồn kho = sum of batches in this supermarket
+    const stock = (DB.lohang || []).reduce((s,b)=>s+(parseFloat(b.soLuong)||0),0);
+    // chất lượng = counts of kiemDinh; also show non-conforming count
+    const totalChecks = (DB.kiemDinh || []).length;
+    const notOk = (DB.kiemDinh || []).filter(k=>k.ketQua && k.ketQua.toLowerCase().includes('không')).length;
+
+    document.getElementById('report-production').textContent = incoming + ' đơn vị';
+    document.getElementById('report-received').textContent = stock + ' đơn vị';
+    document.getElementById('report-stock').textContent = `${stock} đơn vị`;
+    const qEl = document.getElementById('report-quality');
+    if (qEl) qEl.textContent = `${totalChecks} kiểm định (${notOk} không đạt)`;
+}
+
+function renderInventory() {
+    renderTable('#table-inventory', DB.lohang || [], b => `
+        <td>${b.maLo}</td><td>${b.sanPham||''}</td><td>${b.soLuong||0}</td><td>${b.ngayTao||''}</td>
+        <td>${`<button onclick="editBatch('${b.maLo}')">Sửa</button> <button onclick="deleteBatch('${b.maLo}')">Xóa</button>`}</td>`);
+}
+
+
 
 // Modal
 function openModal(html) { modalBody.innerHTML = html; modal.classList.remove('hidden'); }
@@ -116,181 +149,97 @@ function closeModal() { modal.classList.add('hidden'); modalBody.innerHTML = '';
 document.querySelector('.modal-close')?.addEventListener('click', closeModal);
 modal.addEventListener('click', e => e.target === modal && closeModal());
 
-// Phiếu nhập
-window.editPhieu = function(id) {
-    const p = DB.phieuNhap.find(x => x.maPhieu === id);
-    if (!p) return;
-    openModal(`<h3>Sửa phiếu nhập</h3>
-        <label>Mã phiếu</label><input id="mp" value="${p.maPhieu}" />
-        <label>Mã lô</label><input id="ml" value="${p.maLo}" />
-        <label>Sản phẩm</label><input id="sp" value="${p.sanPham}" />
-        <label>Số lượng</label><input id="sl" type="number" value="${p.soLuong}" />
-        <label>Nông dân</label><input id="tn" value="${p.tenNong}" />
-        <label>Kho</label><input id="kh" value="${p.khoNhap}" />
-        <label>Ngày</label><input id="ng" type="date" value="${p.ngayNhap}" />
-        <button onclick="savePhieu('${id}')">Lưu</button><button onclick="closeModal()">Hủy</button>`);
-};
-
-window.savePhieu = function(id) {
-    const p = DB.phieuNhap.find(x => x.maPhieu === id);
-    if (!p) return;
-    p.maPhieu = document.getElementById('mp').value;
-    p.maLo = document.getElementById('ml').value;
-    p.sanPham = document.getElementById('sp').value;
-    p.soLuong = parseInt(document.getElementById('sl').value);
-    p.tenNong = document.getElementById('tn').value;
-    p.khoNhap = document.getElementById('kh').value;
-    p.ngayNhap = document.getElementById('ng').value;
-    saveDB();
-    renderAll();
-    closeModal();
-};
-
-window.deletePhieu = function(id) {
-    if (!confirm('Xóa phiếu?')) return;
-    DB.phieuNhap = DB.phieuNhap.filter(x => x.maPhieu !== id);
-    saveDB();
-    renderAll();
-};
-
-// Kho
-window.editKho = function(id) {
-    const k = DB.kho.find(x => x.maKho === id);
-    if (!k) return;
-    openModal(`<h3>Sửa kho</h3>
-        <label>Mã kho</label><input id="mk" value="${k.maKho}" />
-        <label>Tên</label><input id="tk" value="${k.tenKho}" />
-        <label>Địa chỉ</label><input id="dc" value="${k.diaChi}" />
-        <label>SĐT</label><input id="sd" value="${k.soDienThoai}" />
-        <button onclick="saveKho('${id}')">Lưu</button><button onclick="closeModal()">Hủy</button>`);
-};
-
-window.saveKho = function(id) {
-    const k = DB.kho.find(x => x.maKho === id);
-    if (!k) return;
-    k.maKho = document.getElementById('mk').value;
-    k.tenKho = document.getElementById('tk').value;
-    k.diaChi = document.getElementById('dc').value;
-    k.soDienThoai = document.getElementById('sd').value;
-    saveDB();
-    renderAll();
-    closeModal();
-};
-
-window.deleteKho = function(id) {
-    if (!confirm('Xóa kho?')) return;
-    DB.kho = DB.kho.filter(x => x.maKho !== id);
-    saveDB();
-    renderAll();
-};
-
-// Kiểm định
-window.editQuality = function(id) {
-    const q = DB.kiemDinh.find(x => x.maKiemDinh === id);
-    if (!q) return;
-    openModal(`<h3>Sửa kiểm định</h3>
-        <label>Mã</label><input id="mkd" value="${q.maKiemDinh}" />
-        <label>Mã lô</label><input id="ml2" value="${q.maLo}" />
-        <label>Ngày</label><input id="nk" type="date" value="${q.ngayKiem}" />
-        <label>Người</label><input id="nk2" value="${q.nguoiKiem}" />
-        <label>Kết quả</label><select id="kq"><option ${q.ketQua==='Đạt'?'selected':''}>Đạt</option><option>Không</option></select>
-        <label>Ghi chú</label><input id="gc" value="${q.ghiChu}" />
-        <button onclick="saveQuality('${id}')">Lưu</button><button onclick="closeModal()">Hủy</button>`);
-};
-
-window.saveQuality = function(id) {
-    const q = DB.kiemDinh.find(x => x.maKiemDinh === id);
-    if (!q) return;
-    q.maKiemDinh = document.getElementById('mkd').value;
-    q.maLo = document.getElementById('ml2').value;
-    q.ngayKiem = document.getElementById('nk').value;
-    q.nguoiKiem = document.getElementById('nk2').value;
-    q.ketQua = document.getElementById('kq').value;
-    q.ghiChu = document.getElementById('gc').value;
-    saveDB();
-    renderAll();
-    closeModal();
-};
-
-window.deleteQuality = function(id) {
-    if (!confirm('Xóa kiểm định?')) return;
-    DB.kiemDinh = DB.kiemDinh.filter(x => x.maKiemDinh !== id);
-    saveDB();
-    renderAll();
-};
-
-// Create new
-document.getElementById('btn-create-order')?.addEventListener('click', () => {
-    openModal(`<h3>Phiếu mới</h3>
-        <label>Mã</label><input id="mp" placeholder="PN..." />
-        <label>Mã lô</label><input id="ml" />
-        <label>Sản phẩm</label><input id="sp" />
-        <label>Số lượng</label><input id="sl" type="number" />
-        <label>Nông dân</label><input id="tn" />
-        <label>Kho</label><input id="kh" />
-        <label>Ngày</label><input id="ng" type="date" />
-        <button onclick="addPhieu()">Thêm</button><button onclick="closeModal()">Hủy</button>`);
-});
-
-window.addPhieu = function() {
-    DB.phieuNhap.push({
-        maPhieu: document.getElementById('mp').value,
-        maLo: document.getElementById('ml').value,
-        sanPham: document.getElementById('sp').value,
-        soLuong: parseInt(document.getElementById('sl').value),
-        tenNong: document.getElementById('tn').value,
-        khoNhap: document.getElementById('kh').value,
-        ngayNhap: document.getElementById('ng').value
-    });
-    saveDB();
-    renderAll();
-    closeModal();
-};
-
-document.getElementById('btn-add-nhap-hang')?.addEventListener('click', () => {
-    openModal(`<h3>Kho mới</h3>
-        <label>Mã kho</label><input id="mk" placeholder="KHO..." />
-        <label>Tên</label><input id="tk" />
-        <label>Địa chỉ</label><input id="dc" />
-        <label>SĐT</label><input id="sd" />
-        <button onclick="addKho()">Thêm</button><button onclick="closeModal()">Hủy</button>`);
-});
-
-window.addKho = function() {
-    DB.kho.push({
-        maKho: document.getElementById('mk').value,
-        tenKho: document.getElementById('tk').value,
-        diaChi: document.getElementById('dc').value,
-        soDienThoai: document.getElementById('sd').value
-    });
-    saveDB();
-    renderAll();
-    closeModal();
-};
-
-document.getElementById('btn-create-quality')?.addEventListener('click', () => {
-    openModal(`<h3>Kiểm định mới</h3>
-        <label>Mã</label><input id="mkd" placeholder="KD..." />
-        <label>Mã lô</label><input id="ml2" />
-        <label>Ngày</label><input id="nk" type="date" />
-        <label>Người</label><input id="nk2" />
-        <label>Kết quả</label><select id="kq"><option>Đạt</option><option>Không</option></select>
-        <label>Ghi chú</label><input id="gc" />
-        <button onclick="addQuality()">Thêm</button><button onclick="closeModal()">Hủy</button>`);
+// Quality modal
+document.getElementById('btn-create-quality')?.addEventListener('click', ()=>{
+    openModal(`<h3>Thêm phiếu kiểm định</h3>
+        <label>Mã kiểm định</label><input id="q_ma" />
+        <label>Mã lô</label><input id="q_lo" />
+        <label>Ngày kiểm</label><input id="q_ngay" type="date" />
+        <label>Người kiểm</label><input id="q_nguoi" />
+        <label>Kết quả</label><select id="q_ket"><option>Đạt</option><option>Không đạt</option></select>
+        <label>Ghi chú</label><input id="q_gc" />
+        <div style="margin-top:12px"><button onclick="addQuality()">Lưu</button><button onclick="closeModal()">Hủy</button></div>`);
 });
 
 window.addQuality = function() {
-    DB.kiemDinh.push({
-        maKiemDinh: document.getElementById('mkd').value,
-        maLo: document.getElementById('ml2').value,
-        ngayKiem: document.getElementById('nk').value,
-        nguoiKiem: document.getElementById('nk2').value,
-        ketQua: document.getElementById('kq').value,
-        ghiChu: document.getElementById('gc').value
-    });
+    const q = { maKiemDinh: document.getElementById('q_ma').value || 'KD' + Date.now(), maLo: document.getElementById('q_lo').value, ngayKiem: document.getElementById('q_ngay').value || new Date().toLocaleDateString(), nguoiKiem: document.getElementById('q_nguoi').value, ketQua: document.getElementById('q_ket').value, ghiChu: document.getElementById('q_gc').value };
+    DB.kiemDinh = DB.kiemDinh || [];
+    DB.kiemDinh.push(q);
     saveDB();
+    renderReports();
+    closeModal();
+};
+
+// Create Order - simplified modal and handlers for new supermarket app
+document.getElementById('btn-create-order')?.addEventListener('click', () => {
+    openModal(`<h3>Đơn đặt hàng mới</h3>
+        <label>Mã lô</label><input id="input-maLo" placeholder="ML..." />
+        <label>Sản phẩm</label><select id="select-sanpham"><option value="">--Chọn sản phẩm--</option></select>
+        <label>Số lượng</label><input id="input-soLuong" type="number" />
+        <label>Kho nhận</label><select id="select-kho"><option value="">--Chọn kho--</option></select>
+        <label>Gửi tới đại lý/đại lý</label><input id="input-toDaily" placeholder="Tên đại lý..." />
+        <div style="margin-top:8px"><button onclick="addPhieu()">Thêm</button><button onclick="closeModal()">Hủy</button></div>`);
+    populateOrderModalSelects();
+});
+
+function populateOrderModalSelects() {
+    // fill products from lohang
+    const sel = document.getElementById('select-sanpham');
+    const skl = document.getElementById('select-kho');
+    if (sel) {
+        const prods = Array.from(new Set((DB.lohang||[]).map(b => b.sanPham).filter(Boolean)));
+        sel.innerHTML = '<option value="">--Chọn sản phẩm--</option>' + prods.map(p=>`<option>${p}</option>`).join('');
+    }
+    if (skl) {
+        const khs = (DB.kho||[]).map(k=>k.tenKho||k.maKho||'').filter(Boolean);
+        skl.innerHTML = '<option value="">--Chọn kho--</option>' + khs.map(k=>`<option>${k}</option>`).join('');
+    }
+}
+
+window.addPhieu = function() {
+    const maLo = document.getElementById('input-maLo')?.value;
+    const soLuong = document.getElementById('input-soLuong')?.value;
+    const sanPham = document.getElementById('select-sanpham')?.value;
+    const kho = document.getElementById('select-kho')?.value;
+    const toDaily = document.getElementById('input-toDaily')?.value;
+    if (!maLo || !soLuong || !sanPham) { alert('Vui lòng nhập đầy đủ Mã lô, sản phẩm và số lượng'); return; }
+    const uid = 'R' + Date.now();
+    const p = { uid, maPhieu: uid, maLo, sanPham, soLuong: parseFloat(soLuong)||0, khoNhap: kho, toDaily, fromSieuthiId: currentUser?.id, status: 'pending', ngayTao: new Date().toLocaleString() };
+    DB.orders = DB.orders || [];
+    DB.orders.push(p);
+    saveDB();
+    // broadcast to retail_orders channel
+    const retail = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+    retail.push(Object.assign({}, p));
+    localStorage.setItem('retail_orders', JSON.stringify(retail));
     renderAll();
     closeModal();
+};
+
+// Batch edit/delete simple handlers
+window.editBatch = function(maLo) {
+    const b = (DB.lohang||[]).find(x=>x.maLo===maLo);
+    if (!b) return;
+    openModal(`<h3>Sửa lô</h3>
+        <label>Mã lô</label><input id="bl_maLo" value="${b.maLo}" />
+        <label>Sản phẩm</label><input id="bl_sp" value="${b.sanPham||''}" />
+        <label>Số lượng</label><input id="bl_sl" type="number" value="${b.soLuong||0}" />
+        <div style="margin-top:8px"><button onclick="saveBatch('${maLo}')">Lưu</button><button onclick="closeModal()">Hủy</button></div>`);
+};
+
+window.saveBatch = function(oldMaLo) {
+    const b = (DB.lohang||[]).find(x=>x.maLo===oldMaLo);
+    if (!b) return;
+    b.maLo = document.getElementById('bl_maLo').value;
+    b.sanPham = document.getElementById('bl_sp').value;
+    b.soLuong = parseFloat(document.getElementById('bl_sl').value)||0;
+    saveDB(); renderAll(); closeModal();
+};
+
+window.deleteBatch = function(maLo) {
+    if (!confirm('Xóa lô hàng?')) return;
+    DB.lohang = (DB.lohang||[]).filter(x=>x.maLo!==maLo);
+    saveDB(); renderAll();
 };
 
 // Menu navigation - FIX: use [data-section] selector like Nongdan & Daily
@@ -318,4 +267,3 @@ window.addEventListener('DOMContentLoaded', () => {
 function refreshAll() {
     renderAll();
 }
-
