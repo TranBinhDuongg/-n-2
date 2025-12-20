@@ -1,3 +1,4 @@
+
 // Sieuthi.js - Đại lý Management
 let currentUser = null;
 
@@ -76,6 +77,32 @@ function renderAll() {
     renderIncoming();
     renderInventory();
     renderReports();
+    renderDashboard();
+}
+
+function renderDashboard() {
+    // KPIs
+    const totalOrders = (DB.orders || []).length;
+    const totalReceived = (DB.lohang || []).reduce((s,b)=>s+(parseFloat(b.soLuong)||0),0);
+    const stock = totalReceived;
+    const qualityAlerts = (DB.kiemDinh || []).filter(k => { const v = String(k.ketQua||'').toLowerCase(); return v.includes('không') || v.includes('khong') || v.includes('fail') || v.includes('chua'); }).length;
+
+    const kOrders = document.getElementById('kpi-orders'); if (kOrders) kOrders.textContent = totalOrders;
+    const kReceived = document.getElementById('kpi-received'); if (kReceived) kReceived.textContent = totalReceived;
+    const kStock = document.getElementById('kpi-stock'); if (kStock) kStock.textContent = stock;
+    const kQuality = document.getElementById('kpi-quality'); if (kQuality) kQuality.textContent = qualityAlerts;
+
+    // recent orders table
+    const tb = document.querySelector('#table-orders tbody');
+    if (tb) {
+        tb.innerHTML = '';
+        const recent = (DB.orders || []).slice().reverse().slice(0,10);
+        recent.forEach(o => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${o.maPhieu||o.uid||o.uid||o.maPhieu||o.id||''}</td><td>${o.maLo||''} — ${o.sanPham||''}</td><td>${o.soLuong||o.quantity||0}</td><td>${o.toDaily||o.toDailyAgency||o.to||''}</td><td>${o.ngayTao||o.ngayNhap||o.date||''}</td><td>${o.status||''}</td>`;
+            tb.appendChild(tr);
+        });
+    }
 }
 
 function renderOrders() {
@@ -84,13 +111,30 @@ function renderOrders() {
         <td>${o.status==='pending'?`<button onclick="cancelOrder('${o.uid}')">Hủy</button>`:''}</td>`);
 }
 
+
+
 function renderIncoming() {
     try {
         const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-        const mine = all.filter(m => (String(m.toSieuthiId) === String(currentUser?.id) || String(m.toSieuthi) === String(currentUser?.id) || String(m.toSieuthi) === String(currentUser?.fullName)));
+        // Show retail orders related to this supermarket:
+        // - orders created by this supermarket (fromSieuthiId)
+        // - orders targeted to this supermarket (toSieuthiId / toSieuthi / toDailyAgency)
+        // show incoming shipments that were created by this sieuthi and have been shipped by the daily
+        const mine = all.filter(m => String(m.fromSieuthiId) === String(currentUser?.id) && String(m.status).toLowerCase() === 'shipped');
+        // update incoming badge on sidebar
+        try {
+            const link = document.querySelector('.menu-link[data-section="receive"]');
+            if (link) {
+                let b = link.querySelector('.badge-incoming');
+                if (!b) { b = document.createElement('span'); b.className = 'badge-incoming'; b.style.marginLeft = '8px'; b.style.background = '#e53e3e'; b.style.color = '#fff'; b.style.padding = '2px 6px'; b.style.borderRadius = '12px'; b.style.fontSize = '12px'; link.appendChild(b); }
+                b.textContent = String(mine.length || '');
+                b.style.display = mine.length ? '' : 'none';
+            }
+        } catch (e) { /* ignore */ }
+
         renderTable('#table-incoming', mine, m => `
-            <td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham||''}</td><td>${m.soLuong}</td><td>${m.toDaily||''}</td><td>${m.ngayTao||''}</td><td>${m.status||''}</td>
-            <td>${m.status!=='received'?`<button onclick="markRetailOrderReceived('${m.uid}')">Đã nhận</button>`:''}</td>`);
+            <td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham||''}</td><td>${m.soLuong}</td><td>${m.toDaily||m.toDailyAgency||m.toSieuthi||''}</td><td>${m.ngayTao||''}</td><td>${m.status||''}</td>
+            <td>${m.status==='shipped'?`<button onclick="markRetailOrderReceived('${m.uid}')">Đã nhận</button>`:''}</td>`);
     } catch (e) { console.warn(e); }
 }
 
@@ -120,7 +164,8 @@ function cancelOrder(uid) {
 function renderReports() {
     // nhập kho = total received from retail_orders addressed to this sieuthi
     const allRetail = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-    const incoming = allRetail.filter(r => r.status === 'received' && (String(r.toSieuthiId) === String(currentUser?.id) || String(r.toSieuthi) === String(currentUser?.id) || String(r.toSieuthi) === String(currentUser?.fullName))).reduce((s,r)=>s+(parseFloat(r.soLuong)||0),0);
+    // incoming = total received for orders created by this supermarket
+    const incoming = allRetail.filter(r => r.status === 'received' && String(r.fromSieuthiId) === String(currentUser?.id)).reduce((s,r)=>s+(parseFloat(r.soLuong)||0),0);
     // tồn kho = sum of batches in this supermarket
     const stock = (DB.lohang || []).reduce((s,b)=>s+(parseFloat(b.soLuong)||0),0);
     // chất lượng = counts of kiemDinh; also show non-conforming count
@@ -174,10 +219,11 @@ window.addQuality = function() {
 document.getElementById('btn-create-order')?.addEventListener('click', () => {
     openModal(`<h3>Đơn đặt hàng mới</h3>
         <label>Mã lô</label><input id="input-maLo" placeholder="ML..." />
+        <label>Đại lý</label>
+        <select id="select-daily"><option value="">-- Chọn đại lý --</option></select>        
         <label>Sản phẩm</label><select id="select-sanpham"><option value="">--Chọn sản phẩm--</option></select>
         <label>Số lượng</label><input id="input-soLuong" type="number" />
-        <label>Kho nhận</label><select id="select-kho"><option value="">--Chọn kho--</option></select>
-        <label>Gửi tới đại lý/đại lý</label><input id="input-toDaily" placeholder="Tên đại lý..." />
+        <label>Kho nhận</label><select id="select-kho"><option value="">--Chọn kho--</option></select>        
         <div style="margin-top:8px"><button onclick="addPhieu()">Thêm</button><button onclick="closeModal()">Hủy</button></div>`);
     populateOrderModalSelects();
 });
@@ -186,6 +232,7 @@ function populateOrderModalSelects() {
     // fill products from lohang
     const sel = document.getElementById('select-sanpham');
     const skl = document.getElementById('select-kho');
+    const sDaily = document.getElementById('select-daily');
     if (sel) {
         const prods = Array.from(new Set((DB.lohang||[]).map(b => b.sanPham).filter(Boolean)));
         sel.innerHTML = '<option value="">--Chọn sản phẩm--</option>' + prods.map(p=>`<option>${p}</option>`).join('');
@@ -194,6 +241,70 @@ function populateOrderModalSelects() {
         const khs = (DB.kho||[]).map(k=>k.tenKho||k.maKho||'').filter(Boolean);
         skl.innerHTML = '<option value="">--Chọn kho--</option>' + khs.map(k=>`<option>${k}</option>`).join('');
     }
+
+    // populate daily agencies list (prefer registered users when possible)
+    try {
+        const list = JSON.parse(localStorage.getItem('dailyAgencies') || '[]') || [];
+        let users = JSON.parse(localStorage.getItem('users') || '[]') || [];
+        // If no registered users present (app may have not run login initializer), provide lightweight defaults so display uses expected fullName
+        if (!Array.isArray(users) || users.length === 0) {
+            users = [
+                { id: 4, role: 'daily', username: 'daily1', fullName: 'Đại lý 1', maDaiLy: 'DL001' },
+                { id: 5, role: 'daily', username: 'daily2', fullName: 'Đại lý 2', maDaiLy: 'DL002' }
+            ];
+        }
+        if (sDaily) {
+            sDaily.innerHTML = '<option value="">-- Chọn đại lý --</option>';
+            // Prefer registered users with role 'daily' to build list (show their fullName)
+            const dailiesFromUsers = users.filter(u => (u.role || '').toString().toLowerCase().includes('daily'));
+            const usedMa = new Set();
+            if (dailiesFromUsers.length) {
+                sDaily.innerHTML += dailiesFromUsers.map(u => {
+                    const val = u.maDaiLy || u.id;
+                    usedMa.add(String(u.maDaiLy || u.id));
+                    return `<option value="${val}" data-userid="${u.id}">${u.fullName || u.hoTen || u.username || u.id} (${u.maDaiLy || u.id})</option>`;
+                }).join('');
+            }
+            // Append any agencies from dailyAgencies that are not represented by users
+            if (Array.isArray(list) && list.length) {
+                list.forEach(a => {
+                    if (usedMa.has(String(a.maDaiLy))) return;
+                    const uid = a.userId || '';
+                    sDaily.innerHTML += `<option value="${a.maDaiLy}" data-userid="${uid}">${a.tenDaiLy || a.maDaiLy} (${a.maDaiLy})</option>`;
+                });
+            }
+        }
+    } catch (e) { console.warn('populate daily failed', e); }
+
+    // when daily selected, filter products to those related to that daily (try per-user kho or phieuNhap, fallback to shared lohang)
+    if (sDaily) {
+        sDaily.addEventListener('change', () => {
+            const val = sDaily.value;
+            let products = [];
+            try {
+                // try per-user kho items by daily user id stored in option data-userid
+                const opt = sDaily.options[sDaily.selectedIndex];
+                const userId = opt?.dataset?.userid;
+                if (userId) {
+                    const k = JSON.parse(localStorage.getItem(`user_${userId}_kho`) || '[]');
+                    if (Array.isArray(k) && k.length) {
+                        k.forEach(kk => { if (Array.isArray(kk.items)) kk.items.forEach(it => it.sanPham && products.push(it.sanPham)); });
+                    }
+                    const pnh = JSON.parse(localStorage.getItem(`user_${userId}_phieuNhap`) || '[]');
+                    if (Array.isArray(pnh) && pnh.length) pnh.forEach(r => r.sanPham && products.push(r.sanPham));
+                }
+            } catch(e){ /* ignore */ }
+            // fallback: shared lohang
+            if (products.length === 0) {
+                try { products = (JSON.parse(localStorage.getItem('lohang')||'[]')||[]).filter(l => l.sanPham).map(l=>l.sanPham); } catch(e){ products = []; }
+            }
+            const uniq = [...new Set(products)].filter(Boolean);
+            if (sel) {
+                if (uniq.length) sel.innerHTML = '<option value="">--Chọn sản phẩm--</option>' + uniq.map(p=>`<option>${p}</option>`).join('');
+                else sel.innerHTML = '<option value="">-- Không có sản phẩm --</option>';
+            }
+        });
+    }
 }
 
 window.addPhieu = function() {
@@ -201,10 +312,12 @@ window.addPhieu = function() {
     const soLuong = document.getElementById('input-soLuong')?.value;
     const sanPham = document.getElementById('select-sanpham')?.value;
     const kho = document.getElementById('select-kho')?.value;
-    const toDaily = document.getElementById('input-toDaily')?.value;
+    const selDaily = document.getElementById('select-daily');
+    const toDailyAgency = selDaily?.value || '';
+    const toDailyUserId = selDaily?.selectedOptions?.[0]?.dataset?.userid || '';
     if (!maLo || !soLuong || !sanPham) { alert('Vui lòng nhập đầy đủ Mã lô, sản phẩm và số lượng'); return; }
     const uid = 'R' + Date.now();
-    const p = { uid, maPhieu: uid, maLo, sanPham, soLuong: parseFloat(soLuong)||0, khoNhap: kho, toDaily, fromSieuthiId: currentUser?.id, status: 'pending', ngayTao: new Date().toLocaleString() };
+    const p = { uid, maPhieu: uid, maLo, sanPham, soLuong: parseFloat(soLuong)||0, khoNhap: kho, toDailyAgency, toDailyUserId, toDaily: selDaily?.selectedOptions?.[0]?.text || '', fromSieuthiId: currentUser?.id, status: 'pending', ngayTao: new Date().toLocaleString() };
     DB.orders = DB.orders || [];
     DB.orders.push(p);
     saveDB();
@@ -267,3 +380,15 @@ window.addEventListener('DOMContentLoaded', () => {
 function refreshAll() {
     renderAll();
 }
+
+// Listen for storage changes (from other tabs/windows) to refresh views
+window.addEventListener('storage', (ev) => {
+    try {
+        if (!ev.key) return;
+        const keysToWatch = ['retail_orders', 'lohang'];
+        if (keysToWatch.includes(ev.key) || ev.key.includes('retail_orders') || ev.key.includes('lohang')) {
+            try { loadDB(); } catch (e) {}
+            try { renderAll(); } catch (e) {}
+        }
+    } catch (err) { console.warn('storage listener error (sieuthi)', err); }
+});

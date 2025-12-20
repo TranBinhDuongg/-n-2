@@ -34,6 +34,33 @@ function loadDailyKhos() {
     return JSON.parse(localStorage.getItem('kho') || '[]');
 }
 
+// Status helpers: normalize and display
+function mapStatusToCode(s) {
+    if (!s && s !== '') return '';
+    const v = String(s || '').trim().toLowerCase();
+    const base = v.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    if (base.includes('pending') || base.includes('cho')) return 'pending';
+    if (base.includes('prepar') || base.includes('chu an') || base.includes('chuẩn')) return 'preparing';
+    if (base.includes('ship') || base.includes('xuat') || base.includes('da xuat')) return 'shipped';
+    if (base.includes('nhan') || base.includes('received')) return 'received';
+    if (base.includes('kiem')) return 'awaiting_check';
+    if (base.includes('nhan don') || base.includes('nông dan nhan don') || base.includes('accepted')) return 'accepted';
+    return base;
+}
+
+function statusDisplay(codeOrRaw) {
+    const code = mapStatusToCode(codeOrRaw);
+    switch (code) {
+        case 'pending': return 'Chờ xử lý';
+        case 'preparing': return 'Đang chuẩn bị';
+        case 'shipped': return 'Đã xuất';
+        case 'received': return 'Đã nhận';
+        case 'awaiting_check': return 'Chờ kiểm định';
+        case 'accepted': return 'Đã nhận (Nông dân)';
+        default: return String(codeOrRaw || '');
+    }
+}
+
 // Per-user database structure
 const DB = {
     farms: [],
@@ -150,20 +177,21 @@ function renderIncomingOrders() {
             return u ? (u.fullName || u.hoTen || u.username) : (m.fromDailyUserId || 'Đại lý');
         })() : 'Đại lý';
         const status = m.status || 'pending';
+        const code = mapStatusToCode(status);
         let actions = '';
         const idKey = m.uid || m.maPhieu;
-        if (status === 'pending') {
+        if (code === 'pending') {
             actions = `<button class="btn small" onclick="confirmIncomingOrder('${idKey}')">Xác nhận</button>`;
-        } else if (status === 'preparing' || status === 'Nông dân nhận đơn') {
+        } else if (code === 'preparing' || code === 'accepted') {
             // when farmer has accepted the order show 'Xuất đơn' so they can ship to the Daily
             actions = `<button class="btn small" onclick="openShipModal('${idKey}')">Xuất đơn</button>`;
-        } else if (status === 'shipped') {
+        } else if (code === 'shipped') {
             actions = `<span>Đã xuất</span>`;
-        } else if (status === 'received') {
+        } else if (code === 'received') {
             actions = `<span>Đã nhận bởi Đại lý</span>`;
         }
 
-        tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${dailyName}</td><td>${(m.ngayTao||'')}</td><td>${status}</td><td>${actions}</td>`;
+        tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${dailyName}</td><td>${(m.ngayTao||'')}</td><td>${statusDisplay(status)}</td><td>${actions}</td>`;
         tbody.appendChild(tr);
     });
 }
@@ -175,8 +203,8 @@ window.confirmIncomingOrder = function(idKey) {
     const idx = all.findIndex(x => (String(x.uid) === String(idKey) || String(x.maPhieu) === String(idKey)) && String(x.toFarmerUserId) === String(currentUser?.id));
     console.debug('found index=', idx);
     if (idx === -1) return alert('Không tìm thấy đơn');
-    // mark that farmer accepted the order
-    all[idx].status = 'Nông dân nhận đơn';
+    // mark that farmer accepted the order (use canonical code)
+    all[idx].status = 'accepted';
     localStorage.setItem('market_orders', JSON.stringify(all));
     // reload local view
     DB.marketOrders = all.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
@@ -207,8 +235,8 @@ window.shipIncomingOrder = function(idKey) {
         return alert('Không tìm thấy đơn');
     }
     const ord = all[idx];
-    // mark as shipped and waiting for quality check
-    ord.status = 'Đang chờ kiểm định';
+    // mark as shipped and waiting for quality check (canonical)
+    ord.status = 'shipped';
     ord.shipInfo = { ngayGui: date, note };
     localStorage.setItem('market_orders', JSON.stringify(all));
     // Notify the target Daily: create a receipt (phieuNhap) and a kiemDinh entry
@@ -219,9 +247,9 @@ window.shipIncomingOrder = function(idKey) {
             const phieuKey = `user_${dailyId}_phieuNhap`;
             const existingPhieu = JSON.parse(localStorage.getItem(phieuKey) || '[]');
             const found = existingPhieu.find(p => String(p.maPhieu) === String(ord.maPhieu));
-            if (found) {
+                if (found) {
                 // update existing receipt status and fields
-                found.status = 'Đang chờ kiểm định';
+                found.status = 'awaiting_check';
                 found.maLo = ord.maLo || found.maLo;
                 found.sanPham = ord.sanPham || found.sanPham;
                 found.soLuong = parseFloat(ord.soLuong) || found.soLuong;
@@ -238,7 +266,7 @@ window.shipIncomingOrder = function(idKey) {
                     khoNhap: ord.khoNhap || '',
                     ngayNhap: new Date().toLocaleDateString(),
                     ghiChu: 'Tạo tự động khi nông dân giao: ' + (ord.maPhieu || ''),
-                    status: 'Đang chờ kiểm định'
+                    status: 'awaiting_check'
                 };
                 existingPhieu.push(newPhieu);
             }
@@ -435,30 +463,9 @@ window.saveBatch = function(id = null) {
     if (id) {
         const batch = DB.batches.find(b => b.id === id);
         if (batch) { batch.farmId = farmId; batch.farmName = farm.name; batch.product = product; batch.quantity = qty; batch.harvest = harvest; batch.expiry = expiry; }
-        // also update shared lohang (global) so others (Daily) can see this batch
-        try {
-            const all = JSON.parse(localStorage.getItem('lohang') || '[]');
-            const lo = all.find(x => String(x.maLo) === String(id));
-            if (lo) {
-                lo.sanPham = product;
-                lo.maNong = currentUser?.maNong || currentUser?.id || lo.maNong;
-                lo.soLuong = qty;
-                lo.ngayTao = harvest;
-                lo.hanDung = expiry;
-            } else {
-                all.push({ maLo: id, sanPham: product, maNong: currentUser?.maNong || currentUser?.id || '', soLuong: qty, ngayTao: harvest, hanDung: expiry });
-            }
-            localStorage.setItem('lohang', JSON.stringify(all));
-        } catch (e) { /* ignore */ }
     } else {
         const newId = 'B' + Date.now();
         DB.batches.push({ id: newId, farmId, farmName: farm.name, product, quantity: qty, harvest, expiry });
-        // also add to shared lohang so Daily can suggest this product
-        try {
-            const all = JSON.parse(localStorage.getItem('lohang') || '[]');
-            all.push({ maLo: newId, sanPham: product, maNong: currentUser?.maNong || currentUser?.id || '', soLuong: qty, ngayTao: harvest, hanDung: expiry });
-            localStorage.setItem('lohang', JSON.stringify(all));
-        } catch (e) { /* ignore */ }
     }
     saveDB();
     renderBatches();

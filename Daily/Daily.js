@@ -33,9 +33,9 @@ function saveUserData(key, data) {
 const DB = {
     nongdan: JSON.parse(localStorage.getItem('nongdan') || '[]'),      
     lohang: JSON.parse(localStorage.getItem('lohang') || '[]'),        
-    phieuNhap: [],  // Will be loaded per-user
-    kho: [],        // Will be loaded per-user
-    kiemDinh: [],   // Will be loaded per-user
+    phieuNhap: [],  
+    kho: [],        
+    kiemDinh: [],   
     dailyAgencies: JSON.parse(localStorage.getItem('dailyAgencies') || '[]'), // Shared
 };
 
@@ -99,6 +99,35 @@ function isStatusPending(s) {
     const v = String(s).trim().toLowerCase();
     const base = v.normalize('NFD').replace(/\p{Diacritic}/gu, '');
     return base.includes('cho') || base.includes('pending') || base.includes('kiem');
+}
+
+// Normalize various status strings into canonical status codes
+function mapStatusToCode(s) {
+    if (!s && s !== '') return '';
+    const v = String(s || '').trim().toLowerCase();
+    const base = v.normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    if (base === '' || base === 'created' || base.includes('tao') || base.includes('moi')) return 'created';
+    if (base.includes('pending') || base.includes('cho')) return 'pending';
+    if (base.includes('prepar') || base.includes('chu an') || base.includes('chuẩn') || base.includes('dang chuan')) return 'preparing';
+    if (base.includes('ship') || base.includes('xuat') || base.includes('da xuat') || base.includes('đã xuất')) return 'shipped';
+    if (base.includes('nhan') || base.includes('received') || base.includes('da nhan')) return 'received';
+    if (base.includes('kiem')) return 'awaiting_check';
+    if (base.includes('accepted') || base.includes('nhan don') || base.includes('nông dan nhan don') || base.includes('dang cho')) return 'accepted';
+    return base;
+}
+
+function statusDisplay(codeOrRaw) {
+    const code = mapStatusToCode(codeOrRaw);
+    switch (code) {
+        case 'created': return 'Đã tạo';
+        case 'pending': return 'Chờ xử lý';
+        case 'preparing': return 'Đang chuẩn bị';
+        case 'shipped': return 'Đã xuất';
+        case 'received': return 'Đã nhận';
+        case 'awaiting_check': return 'Chờ kiểm định';
+        case 'accepted': return 'Đã nhận (Nông dân)';
+        default: return String(codeOrRaw || '');
+    }
 }
 
 // Render reports (statistics) based on current DB state
@@ -229,6 +258,28 @@ function adjustStockOnReceipt(receipt, delta) {
             ngayTao: receipt.ngayNhap || new Date().toLocaleDateString(),
             hanDung: ''
         });
+    }
+}
+
+// Add received quantity into a specific warehouse (per-daily kho)
+function addToWarehouse(maKho, maLo, sanPham, qty) {
+    if (!maKho) return;
+    const amount = parseFloat(qty) || 0;
+    // find warehouse for current user
+    let kho = (DB.kho || []).find(k => String(k.maKho) === String(maKho));
+    if (!kho) {
+        // create a minimal warehouse entry if missing
+        kho = { maKho: maKho, tenKho: maKho, diaChi: '', soDienThoai: '', maDaiLy: currentUser?.maDaiLy || '', items: [] };
+        DB.kho.push(kho);
+    }
+    if (!Array.isArray(kho.items)) kho.items = [];
+    // find existing item by batch code first, otherwise by product name
+    let item = kho.items.find(it => String(it.maLo || '') === String(maLo));
+    if (!item) item = kho.items.find(it => it.sanPham && it.sanPham === sanPham);
+    if (item) {
+        item.soLuong = (parseFloat(item.soLuong) || 0) + amount;
+    } else {
+        kho.items.push({ maLo: maLo || '', sanPham: sanPham || '', soLuong: amount });
     }
 }
 
@@ -464,6 +515,18 @@ function initCreateOrderModal() {
         // Match by multiple identifiers because DB.lohang may use maNong codes (e.g. 'ND001')
         const users = JSON.parse(localStorage.getItem('users') || '[]');
         const farmerUser = users.find(u => String(u.id) === String(fid));
+        // Prepare a combined batches list: include shared DB.lohang and farmer's own per-user batches
+        let allBatches = Array.isArray(batches) ? batches.slice() : [];
+        try {
+            if (farmerUser && farmerUser.id) {
+                const farmerBatches = JSON.parse(localStorage.getItem(`user_${farmerUser.id}_batches`) || '[]');
+                if (Array.isArray(farmerBatches) && farmerBatches.length) {
+                    // normalize farmer batch shape to match shared lohang entries
+                    const mapped = farmerBatches.map(b => ({ maLo: b.id || b.maLo || '', sanPham: b.product || b.sanPham || '', maNong: farmerUser.maNong || farmerUser.id || '', soLuong: b.quantity || b.soLuong || 0, farmName: b.farmName || '' }));
+                    allBatches = allBatches.concat(mapped);
+                }
+            }
+        } catch (e) { /* ignore */ }
         const ids = new Set();
         if (farmerUser) {
             if (farmerUser.maNong) ids.add(String(farmerUser.maNong));
@@ -486,7 +549,7 @@ function initCreateOrderModal() {
             }
         } catch (e) { /* ignore */ }
 
-        const prods = batches
+        const prods = allBatches
             .filter(b => {
                 const ownerId = String(b.maNong || b.farmId || '');
                 if (ids.has(ownerId)) return true;
@@ -640,16 +703,61 @@ function saveKiemDinh(existingId = null) {
     console.log('saveKiemDinh:', { maKiemDinh, maLo, ketQua, passed, relatedCount: (related || []).length });
 
     if (passed) {
+        // If no related per-user receipts were found, try to discover matching orders in shared channels
         if (!related || related.length === 0) {
-            console.warn('No related pending receipts found for maLo', maLo);
+            console.warn('No related pending receipts found for maLo in per-user DB, searching shared orders for maLo', maLo);
+            try {
+                const sharedRetail = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+                const sharedMarket = JSON.parse(localStorage.getItem('market_orders') || '[]');
+                const matches = [];
+                // collect retail_orders addressed to this daily or matching maLo
+                (sharedRetail || []).forEach(o => {
+                    try {
+                        if (!o) return;
+                        if (String(o.maLo) === String(maLo)) matches.push({ maPhieu: o.maPhieu || o.uid || ('PN' + Date.now()), maLo: o.maLo, sanPham: o.sanPham, soLuong: parseFloat(o.soLuong)||0, khoNhap: o.khoNhap || '', ngayNhap: o.ngayTao || new Date().toLocaleDateString(), source: 'retail' });
+                    } catch(e){}
+                });
+                // collect market_orders that created receipts for this maLo
+                (sharedMarket || []).forEach(o => {
+                    try {
+                        if (!o) return;
+                        if (String(o.maLo) === String(maLo)) matches.push({ maPhieu: o.maPhieu || o.uid || ('PN' + Date.now()), maLo: o.maLo, sanPham: o.sanPham, soLuong: parseFloat(o.soLuong)||0, khoNhap: o.khoNhap || '', ngayNhap: o.ngayTao || new Date().toLocaleDateString(), source: 'market' });
+                    } catch(e){}
+                });
+                // Convert matches into per-user receipts if not already present
+                matches.forEach(m => {
+                    const exists = (DB.phieuNhap || []).find(p => String(p.maPhieu) === String(m.maPhieu) || String(p.maLo) === String(m.maLo) && (parseFloat(p.soLuong)||0) === (parseFloat(m.soLuong)||0));
+                    if (!exists) {
+                        DB.phieuNhap = DB.phieuNhap || [];
+                        const rec = { maPhieu: m.maPhieu, maLo: m.maLo, maNongUserId: '', tenNong: '', sanPham: m.sanPham, soLuong: m.soLuong, khoNhap: m.khoNhap || '', ngayNhap: m.ngayNhap, ghiChu: 'Imported from shared orders (' + (m.source||'') + ')', status: 'Đã nhập' };
+                        DB.phieuNhap.push(rec);
+                        related.push(rec);
+                    }
+                });
+            } catch (e) { console.warn('search shared orders failed', e); }
         }
+
+        // For all related receipts (found or imported), apply stock increase and record into warehouses
         related.forEach(r => {
             const qty = parseFloat(r.soLuong) || 0;
             console.log('Applying stock increase for receipt', r.maPhieu, 'maLo', r.maLo, 'qty', qty);
             adjustStockOnReceipt(r, qty);
+            // Determine target warehouse: prefer receipt.khoNhap, else first existing warehouse, else a default per-daily code
+            let targetKho = r.khoNhap;
+            if (!targetKho) {
+                if (Array.isArray(DB.kho) && DB.kho.length > 0) targetKho = DB.kho[0].maKho;
+                else targetKho = 'KHO_' + (currentUser?.maDaiLy || currentUser?.id || 'DEFAULT');
+            }
+            // Also record the received items into the dealer's specific warehouse (creates warehouse if missing)
+            try { addToWarehouse(targetKho, r.maLo, r.sanPham, qty); } catch (e) { console.warn('addToWarehouse failed', e); }
+            r.khoNhap = targetKho;
             r.status = 'Đã kiểm định';
         });
+
+        // persist per-user DB and shared lohang
         saveDB();
+        try { localStorage.setItem('lohang', JSON.stringify(DB.lohang || [])); } catch (e) { console.warn('persist lohang failed', e); }
+
         // refresh UI
         try { renderReceiptsFromDB(); } catch (e) {}
         try { renderInventory(); } catch (e) {}
@@ -739,7 +847,7 @@ function addOrderRow(tableSelector, data) {
         <td>${tenNongDisplay}</td>
         <td>${getKhoName(data.khoNhap)}</td>
         <td>${data.ngayNhap || new Date().toLocaleDateString()}</td>
-        <td class="status-in-transit">${data.status || 'Đã tạo'}</td>
+        <td class="status-in-transit">${statusDisplay(data.status || 'created')}</td>
         <td>
             <button class="btn-edit">Sửa</button>
             <button class="btn-delete">Xóa</button>
@@ -887,7 +995,7 @@ window.markMarketOrderReceived = function(maPhieu) {
 
     // ensure it's recorded in this daily's phieuNhap if not exists
     if (!DB.phieuNhap.find(p => p.maPhieu === ord.maPhieu)) {
-        DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'Chờ kiểm định' });
+    DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'awaiting_check' });
     }
 
     // create a quality-check (kiểm định) entry assigned to this Daily
@@ -917,20 +1025,38 @@ window.markMarketOrderReceived = function(maPhieu) {
 function loadRetailOrdersForDaily() {
     try {
         const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-        const mine = all.filter(m => String(m.toDailyAgency) === String(currentUser?.maDaiLy));
+        const mine = all.filter(m => {
+            try {
+                if (!m) return false;
+                // match by agency code
+                if (String(m.toDailyAgency) === String(currentUser?.maDaiLy)) return true;
+                // match by user id (some orders store user id instead of maDaiLy)
+                if (String(m.toDailyUserId) === String(currentUser?.id)) return true;
+                // match by visible label
+                if (String(m.toDaily) === String(currentUser?.fullName)) return true;
+                // match if toDailyAgency was set to the user's id
+                if (String(m.toDailyAgency) === String(currentUser?.id)) return true;
+            } catch (e) { /* ignore */ }
+            return false;
+        });
         const tb = document.querySelector('#table-retail-incoming tbody');
         // the retail-incoming table was removed from Nhập hàng page; if not present, skip rendering
         if (!tb) return;
         tb.innerHTML = '';
         mine.forEach(m => {
+            if (!m.uid) return;
+            // avoid duplicate rows
+            if (tb.querySelector(`[data-retail='${m.uid}']`)) return;
             const tr = document.createElement('tr');
+            tr.dataset.retail = m.uid;
             const shopName = (function(){ try { const users = JSON.parse(localStorage.getItem('users')||'[]'); const u = users.find(x=>String(x.id)===String(m.fromSieuthiId)); return u ? (u.fullName||u.username) : (m.fromSieuthiId||'Siêu thị'); } catch(e){ return m.fromSieuthiId || 'Siêu thị'; } })();
             tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${shopName}</td><td>${m.ngayTao || ''}</td><td>${m.status || 'pending'}</td>`;
             const td = document.createElement('td');
-            if (m.status === 'pending') {
+            if (String(m.status) === 'pending') {
                 td.innerHTML = `<button class="btn small" onclick="confirmRetailOrder('${m.uid}')">Xác nhận</button>`;
+            } else if (String(m.status) === 'shipped') {
+                td.innerHTML = `<button class="btn small" onclick="markRetailOrderReceived('${m.uid}')">Đã nhận</button>`;
             } else {
-                // Do not render a "Xuất đơn" action here — xuất hàng từ Đại lý đến Siêu thị đã bị vô hiệu hóa
                 td.innerHTML = `<span>${m.status || ''}</span>`;
             }
             tr.appendChild(td);
@@ -942,12 +1068,24 @@ function loadRetailOrdersForDaily() {
 window.confirmRetailOrder = function(uid) {
     try {
         const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-        const idx = all.findIndex(x => String(x.uid) === String(uid) && String(x.toDailyAgency) === String(currentUser?.maDaiLy));
+        const idx = all.findIndex(x => {
+            if (!x) return false;
+            if (String(x.uid) !== String(uid)) return false;
+            if (String(x.toDailyAgency) === String(currentUser?.maDaiLy)) return true;
+            if (String(x.toDailyUserId) === String(currentUser?.id)) return true;
+            if (String(x.toDailyAgency) === String(currentUser?.id)) return true;
+            return false;
+        });
         if (idx === -1) return alert('Không tìm thấy đơn');
-        all[idx].status = 'preparing';
-        localStorage.setItem('retail_orders', JSON.stringify(all));
-        loadRetailOrdersForDaily();
-        alert('Đã xác nhận nhận đơn, đang chuẩn bị.');
+        // Skip intermediate 'preparing' state: confirm -> ship immediately
+        if (!confirm('Xác nhận và xuất hàng cho Siêu thị ngay chứ?')) return;
+        try {
+            // Call ship handler directly; it will deduct stock, set status to 'shipped' and persist
+            shipRetailOrder(uid);
+        } catch (e) {
+            console.warn('shipRetailOrder failed from confirmRetailOrder', e);
+            alert('Lỗi khi xuất đơn');
+        }
     } catch (e) { console.warn(e); }
 };
 
@@ -963,27 +1101,164 @@ window.shipRetailOrder = function(uid) {
         const date = document.getElementById('ship-date')?.value || new Date().toLocaleDateString();
         const note = document.getElementById('ship-note')?.value || '';
         const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-        const idx = all.findIndex(x => String(x.uid) === String(uid) && String(x.toDailyAgency) === String(currentUser?.maDaiLy));
+        const idx = all.findIndex(x => {
+            if (!x) return false;
+            if (String(x.uid) !== String(uid)) return false;
+            if (String(x.toDailyAgency) === String(currentUser?.maDaiLy)) return true;
+            if (String(x.toDailyUserId) === String(currentUser?.id)) return true;
+            if (String(x.toDailyAgency) === String(currentUser?.id)) return true;
+            return false;
+        });
         if (idx === -1) return alert('Không tìm thấy đơn');
         const ord = all[idx];
-        ord.status = 'shipped';
-        ord.shipInfo = { ngayGui: date, note };
-
-        // decrease shared lohang if possible
+        // Validate available stock in this Daily's warehouses (DB.kho)
+        const needQty = parseFloat(ord.soLuong) || 0;
+        // Build candidate items from DB.kho for this user
+        let candidates = [];
         try {
-            const shippedQty = parseFloat(ord.soLuong) || 0;
-            const allLohang = JSON.parse(localStorage.getItem('lohang') || '[]');
-            let lo = allLohang.find(l => String(l.maLo) === String(ord.maLo));
-            if (!lo) lo = allLohang.find(l => String(l.sanPham) === String(ord.sanPham) && (parseFloat(l.soLuong)||0) >= shippedQty);
-            if (lo) { lo.soLuong = Math.max(0, (parseFloat(lo.soLuong)||0) - shippedQty); }
-            localStorage.setItem('lohang', JSON.stringify(allLohang));
-        } catch (e) { console.warn('reduce lohang failed', e); }
+            (DB.kho || []).forEach(k => {
+                if (!Array.isArray(k.items)) return;
+                k.items.forEach(it => {
+                    if (!it || !it.sanPham) return;
+                    if (String(it.sanPham) === String(ord.sanPham) || String(it.maLo) === String(ord.maLo)) {
+                        // try to get expiry from shared lohang by maLo
+                        let hanDung = null;
+                        try {
+                            const shared = JSON.parse(localStorage.getItem('lohang') || '[]');
+                            const s = shared.find(x => String(x.maLo) === String(it.maLo));
+                            if (s && s.hanDung) hanDung = s.hanDung;
+                        } catch (e) { /* ignore */ }
+                        candidates.push({ kho: k, item: it, maLo: it.maLo || '', soLuong: parseFloat(it.soLuong)||0, hanDung });
+                    }
+                });
+            });
+        } catch (e) { console.warn('build candidates failed', e); }
+
+        // sort by expiry ascending (earliest first), nulls last
+        candidates.sort((a,b) => {
+            const da = a.hanDung ? new Date(a.hanDung).getTime() : Infinity;
+            const db = b.hanDung ? new Date(b.hanDung).getTime() : Infinity;
+            return da - db;
+        });
+
+        // Calculate total available from per-user kho + shared lohang (fallback)
+        const totalFromKho = candidates.reduce((s,c)=>s+(parseFloat(c.soLuong)||0),0);
+        const sharedAll = JSON.parse(localStorage.getItem('lohang') || '[]');
+        const sharedMatches = sharedAll.filter(x => String(x.maLo) === String(ord.maLo) || String(x.sanPham) === String(ord.sanPham));
+        const totalFromShared = sharedMatches.reduce((s,x)=>s+(parseFloat(x.soLuong)||0),0);
+        const totalAvailable = totalFromKho + totalFromShared;
+
+        if (totalAvailable < needQty) {
+            return alert('Không đủ tồn kho để xuất đơn này. Có: ' + totalAvailable + ', cần: ' + needQty);
+        }
+
+        // Deduct quantities from candidates in order (kho first), then from shared lohang if needed
+        let remain = needQty;
+        for (const c of candidates) {
+            if (remain <= 0) break;
+            const avail = parseFloat(c.item.soLuong) || 0;
+            if (avail <= 0) continue;
+            const take = Math.min(avail, remain);
+            // reduce in kho item
+            c.item.soLuong = Math.max(0, avail - take);
+            // also reduce shared lohang if this candidate has a matching maLo entry
+            try {
+                const sIdx = sharedAll.findIndex(x => String(x.maLo) === String(c.maLo));
+                if (sIdx !== -1) {
+                    sharedAll[sIdx].soLuong = Math.max(0, (parseFloat(sharedAll[sIdx].soLuong)||0) - take);
+                }
+            } catch (e) { console.warn('update shared lohang per item failed', e); }
+            remain -= take;
+        }
+
+        // If still need more, deduct from sharedAll matches (by maLo first, then by product)
+        if (remain > 0) {
+            // try maLo matches first
+            for (let i = 0; i < sharedAll.length && remain > 0; i++) {
+                const s = sharedAll[i];
+                if (!s) continue;
+                if (String(s.maLo) !== String(ord.maLo)) continue;
+                const avail = parseFloat(s.soLuong) || 0;
+                if (avail <= 0) continue;
+                const take = Math.min(avail, remain);
+                sharedAll[i].soLuong = Math.max(0, avail - take);
+                remain -= take;
+            }
+            // then by product name
+            for (let i = 0; i < sharedAll.length && remain > 0; i++) {
+                const s = sharedAll[i];
+                if (!s) continue;
+                if (String(s.sanPham) !== String(ord.sanPham)) continue;
+                const avail = parseFloat(s.soLuong) || 0;
+                if (avail <= 0) continue;
+                const take = Math.min(avail, remain);
+                sharedAll[i].soLuong = Math.max(0, avail - take);
+                remain -= take;
+            }
+        }
+
+        // Persist changes
+        try { localStorage.setItem('lohang', JSON.stringify(sharedAll)); } catch (e) { console.warn('persist shared lohang failed', e); }
+        try { saveDB(); } catch (e) { console.warn('saveDB failed', e); }
+
+        // mark as shipped and record shipping info
+        ord.status = 'shipped';
+        ord.shipInfo = { ngayGui: date, note, shippedQty: needQty };
+        // record into Daily's orders history
+        try {
+            DB.orders = DB.orders || [];
+            DB.orders.push({ id: 'O' + Date.now(), batchId: ord.maLo || '', quantity: needQty, recipient: ord.to || ord.toSieuthi || '', kho: ord.khoNhap || '', date, status: 'shipped' });
+            saveDB();
+        } catch(e){ console.warn('record DB.orders failed', e); }
 
         localStorage.setItem('retail_orders', JSON.stringify(all));
         closeModal();
         loadRetailOrdersForDaily();
         alert('Đã xuất đơn và chuyển cho Siêu thị.');
     } catch (e) { console.warn(e); alert('Lỗi khi xuất đơn'); }
+};
+
+// Mark a retail order (from Sieuthi) as received by this Daily
+window.markRetailOrderReceived = function(uid) {
+    try {
+        const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+        const ord = all.find(x => {
+            if (!x) return false;
+            if (String(x.uid) !== String(uid)) return false;
+            if (String(x.toDailyAgency) === String(currentUser?.maDaiLy)) return true;
+            if (String(x.toDailyUserId) === String(currentUser?.id)) return true;
+            if (String(x.toDailyAgency) === String(currentUser?.id)) return true;
+            return false;
+        });
+        if (!ord) return alert('Không tìm thấy đơn');
+
+        // ensure it's recorded in this daily's phieuNhap if not exists
+        if (!DB.phieuNhap.find(p => p.maPhieu === ord.maPhieu)) {
+            DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.maNong || '', tenNong: ord.tenNong || '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap || '', ngayNhap: new Date().toLocaleDateString(), ghiChu: 'Nhận từ Siêu thị: ' + (ord.fromSieuthiId || ''), status: 'awaiting_check' });
+        }
+
+        // create a quality-check (kiểm định) entry assigned to this Daily
+        try {
+            if (!Array.isArray(DB.kiemDinh)) DB.kiemDinh = loadUserData('kiemDinh') || [];
+            const maKiemDinh = 'KD' + Date.now();
+            DB.kiemDinh.push({ maKiemDinh, maLo: ord.maLo, ngayKiem: '', nguoiKiem: '', ketQua: 'Chưa kiểm', ghiChu: 'Tự động tạo sau khi nhận từ Siêu thị: ' + ord.maPhieu });
+        } catch (e) { console.warn('failed to create kiemDinh for retail', e); }
+
+        // persist per-user data
+        saveDB();
+
+        // remove the retail order from shared storage since it's been received
+        const remaining = all.filter(x => String(x.uid) !== String(uid));
+        localStorage.setItem('retail_orders', JSON.stringify(remaining));
+
+        alert('Đã nhận hàng từ Siêu thị. Phiếu nhập chuyển sang kiểm định chất lượng.');
+
+        // Refresh UI
+        try { renderReceiptsFromDB(); } catch (e) {}
+        try { renderKiemDinh(); } catch (e) {}
+        try { loadRetailOrdersForDaily(); } catch (e) {}
+        try { renderReports(); } catch (e) {}
+    } catch (e) { console.warn('markRetailOrderReceived failed', e); alert('Lỗi khi nhận đơn'); }
 };
 
 // Form Submissions
