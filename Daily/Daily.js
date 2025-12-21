@@ -609,7 +609,6 @@ function renderKho() {
             <td><button class="btn small" onclick="editKho('${k.maKho}')">Sửa</button>
                 <button class="btn small btn-danger" onclick="deleteKho('${k.maKho}')">Xóa</button></td>`;
         tbody.appendChild(tr);
-        // Đã xóa phần hiển thị sản phẩm trong kho
     });
 }
 
@@ -831,11 +830,21 @@ function addOrderRow(tableSelector, data) {
     const table = document.querySelector(tableSelector + ' tbody');
     if (!table) return;
     const tr = document.createElement('tr');
-    
     // Build batch cell from maLo and sanPham
     const batchCell = data.maLo + (data.sanPham ? (' — ' + data.sanPham) : '');
     const tenNongDisplay = data.tenNong || data.fromAddress || '';
-    
+
+    // Nếu trạng thái là 'Đã xuất' thì hiển thị text, không cho bấm xuất đơn nữa
+    let actionButtons = `<button class="btn-edit">Sửa</button> <button class="btn-delete">Xóa</button>`;
+    const statusCode = mapStatusToCode(data.status);
+
+    if (statusCode === 'shipped' || data.status === 'Đã xuất') {
+        actionButtons += ` <span class="btn btn-disabled" style="background:#e0e0e0;color:#888;cursor:not-allowed;">Đã xuất</span>`;
+    } else if (statusCode === 'received' || statusCode === 'awaiting_check' || data.status === 'Đã kiểm định' || data.status === 'Đã nhập') {
+        // Thêm nút xuất hàng nếu chưa xuất
+        actionButtons += ` <button class="btn-export btn" style="background:#4caf50;color:#fff;">Xuất đơn</button>`;
+    }
+
     tr.innerHTML = `
         <td>${data.maPhieu}</td>
         <td>${batchCell}</td>
@@ -845,8 +854,7 @@ function addOrderRow(tableSelector, data) {
         <td>${data.ngayNhap || new Date().toLocaleDateString()}</td>
         <td class="status-in-transit">${statusDisplay(data.status || 'created')}</td>
         <td>
-            <button class="btn-edit">Sửa</button>
-            <button class="btn-delete">Xóa</button>
+            ${actionButtons}
         </td>
     `;
     table.prepend(tr);
@@ -874,6 +882,34 @@ function addOrderRow(tableSelector, data) {
     });
     tr.querySelector('.btn-edit')?.addEventListener('click', () => {
         openEditReceipt(data.maPhieu);
+    });
+
+    // Nút xác nhận xuất hàng
+    tr.querySelector('.btn-export')?.addEventListener('click', () => {
+        if (confirm('Xác nhận xuất hàng cho đơn này?')) {
+            const rec = DB.phieuNhap.find(p => p.maPhieu === data.maPhieu);
+            if (rec) {
+                // Trừ kho đại lý
+                let kho = DB.kho.find(k => k.maKho === rec.khoNhap);
+                if (kho && Array.isArray(kho.items)) {
+                    let item = kho.items.find(it => String(it.maLo) === String(rec.maLo));
+                    if (!item) item = kho.items.find(it => it.sanPham === rec.sanPham);
+                    if (item) {
+                        item.soLuong = Math.max(0, (parseFloat(item.soLuong) || 0) - (parseFloat(rec.soLuong) || 0));
+                    }
+                }
+                rec.status = 'Đã xuất';
+                saveDB();
+                tr.querySelector('.status-in-transit').textContent = statusDisplay('Đã xuất');
+                tr.querySelector('.btn-export').replaceWith(document.createElement('span'));
+                tr.querySelector('span').textContent = 'Đã xuất';
+                tr.querySelector('span').className = 'btn btn-disabled';
+                tr.querySelector('span').style.background = '#e0e0e0';
+                tr.querySelector('span').style.color = '#888';
+                tr.querySelector('span').style.cursor = 'not-allowed';
+                alert('Đơn hàng đã được xuất và trừ kho!');
+            }
+        }
     });
 }
 
@@ -938,24 +974,6 @@ document.addEventListener('submit', (e) => {
             kpiEl.textContent = v + 1;
         }
 
-        // -- Notify farmer by writing a market order into shared storage (auto-send) --
-        try {
-            const market = JSON.parse(localStorage.getItem('market_orders') || '[]');
-            const uid = 'MO' + Date.now() + Math.random().toString(36).slice(2,8);
-            market.push({
-                uid,
-                maPhieu: receipt.maPhieu,
-                fromDailyUserId: currentUser?.id || currentUser?.maDaiLy || null,
-                toFarmerUserId: receipt.maNongUserId || '',
-                maLo: receipt.maLo,
-                sanPham: receipt.sanPham,
-                soLuong: receipt.soLuong,
-                khoNhap: receipt.khoNhap,
-                ngayTao: new Date().toISOString(),
-                status: 'pending'
-            });
-            localStorage.setItem('market_orders', JSON.stringify(market));
-        } catch (err) { console.warn('market_orders write failed', err); }
 
         closeModal();
         alert('Đã nhập hàng: ' + receipt.maPhieu);
@@ -978,7 +996,7 @@ function loadMarketOrdersForDaily() {
         const tr = document.createElement('tr');
         tr.dataset.market = m.uid;
         tr.innerHTML = `<td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>—</td><td>${m.khoNhap || ''}</td><td>${m.ngayTao || ''}</td><td class="status-in-transit">Đã xuất</td>
-            <td><button class="btn small" onclick="markMarketOrderReceived('${m.uid}')">Đã nhận</button></td>`;
+            <td><span class="btn btn-disabled" style="background:#e0e0e0;color:#888;cursor:not-allowed;">Đã xuất</span></td>`;
         mainTable.prepend(tr);
     });
 }
@@ -991,7 +1009,7 @@ window.markMarketOrderReceived = function(maPhieu) {
 
     // ensure it's recorded in this daily's phieuNhap if not exists
     if (!DB.phieuNhap.find(p => p.maPhieu === ord.maPhieu)) {
-    DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'awaiting_check' });
+        DB.phieuNhap.push({ maPhieu: ord.maPhieu, maLo: ord.maLo, maNong: ord.toFarmerUserId, tenNong: '', sanPham: ord.sanPham, soLuong: ord.soLuong, khoNhap: ord.khoNhap, ngayNhap: new Date().toLocaleDateString(), ghiChu: '', status: 'awaiting_check' });
     }
 
     // create a quality-check (kiểm định) entry assigned to this Daily
@@ -1004,11 +1022,9 @@ window.markMarketOrderReceived = function(maPhieu) {
     // persist per-user data
     saveDB();
 
-    // remove the market order from shared storage since it's been received (by uid)
-    const remaining = all.filter(x => x.uid !== uid);
-    localStorage.setItem('market_orders', JSON.stringify(remaining));
+    // KHÔNG xoá đơn market_orders ở bước nhận hàng nữa, chỉ xoá sau khi xuất hàng!
 
-    alert('Đã nhận hàng. Phiếu nhập chuyển sang kiểm định chất lượng.');
+    alert('Đã nhận hàng. Phiếu nhập chuyển sang kiểm định chất lượng. Đơn hàng sẽ chuyển qua Siêu thị sau khi xuất hàng.');
 
     // Refresh UI without full reload
     try { renderReceiptsFromDB(); } catch (e) {}
@@ -1046,14 +1062,16 @@ function loadRetailOrdersForDaily() {
             const tr = document.createElement('tr');
             tr.dataset.retail = m.uid;
             const shopName = (function(){ try { const users = JSON.parse(localStorage.getItem('users')||'[]'); const u = users.find(x=>String(x.id)===String(m.fromSieuthiId)); return u ? (u.fullName||u.username) : (m.fromSieuthiId||'Siêu thị'); } catch(e){ return m.fromSieuthiId || 'Siêu thị'; } })();
-            tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${shopName}</td><td>${m.ngayTao || ''}</td><td>${m.status || 'pending'}</td>`;
+            tr.innerHTML = `<td>${m.maPhieu || ''}</td><td>${m.maLo || ''} — ${m.sanPham || ''}</td><td>${m.soLuong}</td><td>${shopName}</td><td>${m.ngayTao || ''}</td><td>${statusDisplay(m.status || 'pending')}</td>`;
             const td = document.createElement('td');
             if (String(m.status) === 'pending') {
-                td.innerHTML = `<button class="btn small" onclick="confirmRetailOrder('${m.uid}')">Xác nhận</button>`;
-            } else if (String(m.status) === 'shipped') {
-                td.innerHTML = `<button class="btn small" onclick="markRetailOrderReceived('${m.uid}')">Đã nhận</button>`;
+                td.innerHTML = `<button class="btn small" onclick="confirmRetailOrder('${m.uid}')">Xác nhận</button>`;           
+            } else if (String(m.status) === 'received') {
+                td.innerHTML = `<span>Đã nhận</span>`;
+            } else if (String(m.status) === 'preparing') {
+                td.innerHTML = `<span>Đang chuẩn bị</span>`;
             } else {
-                td.innerHTML = `<span>${m.status || ''}</span>`;
+                td.innerHTML = `<span>${statusDisplay(m.status || '')}</span>`;
             }
             tr.appendChild(td);
             tb.appendChild(tr);

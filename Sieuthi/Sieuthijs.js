@@ -147,25 +147,10 @@ window.deleteOrder = function(uid) {
 function renderIncoming() {
     try {
         const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-        // Show retail orders related to this supermarket:
-        // - orders created by this supermarket (fromSieuthiId)
-        // - orders targeted to this supermarket (toSieuthiId / toSieuthi / toDailyAgency)
-        // show incoming shipments that were created by this sieuthi and have been shipped by the daily
         const mine = all.filter(m => String(m.fromSieuthiId) === String(currentUser?.id) && String(m.status).toLowerCase() === 'shipped');
-        // update incoming badge on sidebar
-        try {
-            const link = document.querySelector('.menu-link[data-section="receive"]');
-            if (link) {
-                let b = link.querySelector('.badge-incoming');
-                if (!b) { b = document.createElement('span'); b.className = 'badge-incoming'; b.style.marginLeft = '8px'; b.style.background = '#e53e3e'; b.style.color = '#fff'; b.style.padding = '2px 6px'; b.style.borderRadius = '12px'; b.style.fontSize = '12px'; link.appendChild(b); }
-                b.textContent = String(mine.length || '');
-                b.style.display = mine.length ? '' : 'none';
-            }
-        } catch (e) { /* ignore */ }
-
         renderTable('#table-incoming', mine, m => `
             <td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham||''}</td><td>${m.soLuong}</td><td>${m.toDaily||m.toDailyAgency||m.toSieuthi||''}</td><td>${m.ngayTao||''}</td><td>${m.status||''}</td>
-            <td>${m.status==='shipped'?`<button onclick="markRetailOrderReceived('${m.uid}')">Đã nhận</button>`:''}</td>`);
+            <td>${m.status==='shipped'?`<button class=\"btn-edit\" onclick=\"markRetailOrderReceived('${m.uid}')\">Đã nhận</button>`:''}</td>`);
     } catch (e) { console.warn(e); }
 }
 
@@ -212,7 +197,10 @@ function renderReports() {
 function renderInventory() {
     renderTable('#table-inventory', DB.lohang || [], b => `
         <td>${b.maLo}</td><td>${b.sanPham||''}</td><td>${b.soLuong||0}</td><td>${b.ngayTao||''}</td>
-        <td>${`<button onclick="editBatch('${b.maLo}')">Sửa</button> <button onclick="deleteBatch('${b.maLo}')">Xóa</button>`}</td>`);
+        <td>
+            <button class="btn-edit" onclick="editBatch('${b.maLo}')">Sửa</button>
+            <button class="btn-delete" onclick="deleteBatch('${b.maLo}')">Xóa</button>
+        </td>`);
 }
 
 
