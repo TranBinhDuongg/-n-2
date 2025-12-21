@@ -108,7 +108,38 @@ function renderDashboard() {
 function renderOrders() {
     renderTable('#table-orders-all', DB.orders || [], o => `
         <td>${o.maPhieu}</td><td>${o.sanPham}</td><td>${o.soLuong}</td><td>${o.toDaily || o.toDailyAgency || ''}</td><td>${o.ngayTao || ''}</td><td>${o.status || ''}</td>
-        <td>${o.status==='pending'?`<button onclick="cancelOrder('${o.uid}')">Hủy</button>`:''}</td>`);
+        <td>
+            <button class="btn small" onclick="editOrder('${o.uid}')">Sửa</button>
+            <button class="btn small btn-danger" onclick="deleteOrder('${o.uid}')">Xóa</button>
+        </td>`);
+// Sửa đơn hàng
+window.editOrder = function(uid) {
+    const o = (DB.orders || []).find(x => x.uid === uid);
+    if (!o) return;
+    openModal(`<h3>Sửa đơn hàng</h3>
+        <label>Mã lô</label><input id="edit-maLo" value="${o.maLo}" />
+        <label>Sản phẩm</label><input id="edit-sanPham" value="${o.sanPham}" />
+        <label>Số lượng</label><input id="edit-soLuong" type="number" value="${o.soLuong}" />
+        <label>Kho nhận</label><input id="edit-kho" value="${o.khoNhap||''}" />
+        <div style="margin-top:8px"><button onclick="saveOrder('${uid}')">Lưu</button><button onclick="closeModal()">Hủy</button></div>`);
+};
+
+window.saveOrder = function(uid) {
+    const o = (DB.orders || []).find(x => x.uid === uid);
+    if (!o) return;
+    o.maLo = document.getElementById('edit-maLo').value;
+    o.sanPham = document.getElementById('edit-sanPham').value;
+    o.soLuong = parseFloat(document.getElementById('edit-soLuong').value)||0;
+    o.khoNhap = document.getElementById('edit-kho').value;
+    saveDB(); renderAll(); closeModal();
+};
+
+// Xóa đơn hàng
+window.deleteOrder = function(uid) {
+    if (!confirm('Xóa đơn hàng này?')) return;
+    DB.orders = (DB.orders || []).filter(x => x.uid !== uid);
+    saveDB(); renderAll();
+};
 }
 
 
@@ -162,21 +193,20 @@ function cancelOrder(uid) {
 }
 
 function renderReports() {
-    // nhập kho = total received from retail_orders addressed to this sieuthi
-    const allRetail = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-    // incoming = total received for orders created by this supermarket
-    const incoming = allRetail.filter(r => r.status === 'received' && String(r.fromSieuthiId) === String(currentUser?.id)).reduce((s,r)=>s+(parseFloat(r.soLuong)||0),0);
-    // tồn kho = sum of batches in this supermarket
+    // Tổng đơn hàng: số đơn siêu thị tạo
+    const totalOrders = (DB.orders || []).length;
+    // Tồn kho: tổng số sản phẩm trong kho
     const stock = (DB.lohang || []).reduce((s,b)=>s+(parseFloat(b.soLuong)||0),0);
-    // chất lượng = counts of kiemDinh; also show non-conforming count
-    const totalChecks = (DB.kiemDinh || []).length;
-    const notOk = (DB.kiemDinh || []).filter(k=>k.ketQua && k.ketQua.toLowerCase().includes('không')).length;
 
-    document.getElementById('report-production').textContent = incoming + ' đơn vị';
-    document.getElementById('report-received').textContent = stock + ' đơn vị';
-    document.getElementById('report-stock').textContent = `${stock} đơn vị`;
-    const qEl = document.getElementById('report-quality');
-    if (qEl) qEl.textContent = `${totalChecks} kiểm định (${notOk} không đạt)`;
+    const elTotalOrders = document.getElementById('report-production');
+    if (elTotalOrders) elTotalOrders.textContent = totalOrders + ' đơn';
+    const elStock = document.getElementById('report-stock');
+    if (elStock) elStock.textContent = stock + ' sản phẩm';
+    // Ẩn các chỉ số không dùng
+    const elReceived = document.getElementById('report-received');
+    if (elReceived) elReceived.textContent = '';
+    const elQuality = document.getElementById('report-quality');
+    if (elQuality) elQuality.textContent = '';
 }
 
 function renderInventory() {
@@ -220,11 +250,14 @@ document.getElementById('btn-create-order')?.addEventListener('click', () => {
     openModal(`<h3>Đơn đặt hàng mới</h3>
         <label>Mã lô</label><input id="input-maLo" placeholder="ML..." />
         <label>Đại lý</label>
-        <select id="select-daily"><option value="">-- Chọn đại lý --</option></select>        
+        <select id="select-daily"><option value="">-- Chọn đại lý --</option></select>
         <label>Sản phẩm</label><select id="select-sanpham"><option value="">--Chọn sản phẩm--</option></select>
         <label>Số lượng</label><input id="input-soLuong" type="number" />
-        <label>Kho nhận</label><select id="select-kho"><option value="">--Chọn kho--</option></select>        
-        <div style="margin-top:8px"><button onclick="addPhieu()">Thêm</button><button onclick="closeModal()">Hủy</button></div>`);
+        <label>Kho nhận</label><select id="select-kho"><option value="">--Chọn kho--</option></select>
+        <div class="modal-actions">
+            <button class="btn btn-cancel modal-close-btn" type="button" onclick="closeModal()">Hủy</button>
+            <button class="btn" type="button" onclick="addPhieu()">Nhập hàng</button>
+        </div>`);
     populateOrderModalSelects();
 });
 
@@ -372,7 +405,77 @@ window.addEventListener('DOMContentLoaded', () => {
     loadCurrentUser();
     loadDB();
     const user = document.getElementById('current-user');
-    if (user && currentUser) user.innerHTML = `<strong>${currentUser.fullName}</strong>`;
+    if (user && currentUser) {
+        user.innerHTML = `<strong>${currentUser.fullName}</strong>`;
+        user.style.cursor = 'pointer';
+        user.title = 'Xem thông tin cá nhân';
+        user.addEventListener('click', function() {
+            // Fake data cho siêu thị
+            const fakeUser = {
+                fullName: 'Lê Văn C',
+                username: 'sieuthi789',
+                email: 'sieuthi.c@example.com',
+                phone: '0901 234 567',
+                role: 'Siêu thị',
+                storeName: 'Siêu thị Xanh',
+                businessType: 'Siêu thị',
+                businessLicense: 'GP123456',
+                storeSize: '1200',
+                province: 'TP. Hồ Chí Minh',
+                district: 'Quận 1',
+                address: 'Số 1, Đường Lê Lợi',
+                createdAt: '2025-10-10T08:00:00',
+                id: 'ST789123'
+            };
+            const avatar = `<div style="display:flex;justify-content:center;align-items:center;margin-bottom:16px;"><div style="background:linear-gradient(135deg,#4caf50,#388e3c);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0002;"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"44\" height=\"44\" viewBox=\"0 0 24 24\" fill=\"#fff\"><path d=\"M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z\"/></svg></div></div>`;
+            const infoTable = `
+                <table style=\"width:100%;border-collapse:separate;border-spacing:0 12px 0 18px;font-size:16px;\">
+                    <colgroup><col style=\"width:180px;\"><col style=\"width:auto;\"></colgroup>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Họ tên</td><td style=\"font-weight:600;\">${fakeUser.fullName}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Tên đăng nhập</td><td>${fakeUser.username}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Email</td><td>${fakeUser.email}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Số điện thoại</td><td>${fakeUser.phone}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Vai trò</td><td>${fakeUser.role}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Tỉnh/Thành phố</td><td>${fakeUser.province}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Quận/Huyện</td><td>${fakeUser.district}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Địa chỉ</td><td>${fakeUser.address}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Tên cửa hàng/Siêu thị</td><td>${fakeUser.storeName}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Loại hình kinh doanh</td><td>${fakeUser.businessType}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Giấy phép kinh doanh</td><td>${fakeUser.businessLicense}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Quy mô (m²)</td><td>${fakeUser.storeSize}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Ngày tạo tài khoản</td><td>${new Date(fakeUser.createdAt).toLocaleString('vi-VN')}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">ID người dùng</td><td>${fakeUser.id}</td></tr>
+                </table>`;
+            showUserInfoModal(`
+                ${avatar}
+                <div style=\"margin-bottom:12px;text-align:center;font-size:18px;font-weight:600;color:#388e3c;letter-spacing:0.5px;\">Thông tin cá nhân</div>
+                <div style=\"padding:0 8px 8px 8px;\">${infoTable}</div>
+            `);
+        });
+    }
+    // Modal hiển thị thông tin user
+    function showUserInfoModal(html) {
+        let modal = document.getElementById('modal-user-info');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-user-info';
+            modal.style.position = 'fixed';
+            modal.style.top = '0';
+            modal.style.left = '0';
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.3)';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = '9999';
+            document.body.appendChild(modal);
+        }
+        modal.innerHTML = `<div style=\"background:#fff;padding:24px 32px;border-radius:8px;min-width:260px;max-width:90vw;box-shadow:0 2px 16px #0002;position:relative;\">\n            <button id=\"close-user-info-modal\" style=\"position:absolute;top:8px;right:12px;font-size:20px;background:none;border:none;cursor:pointer;\">&times;</button>\n            <h3 style=\"margin-top:0\">Thông tin cá nhân</h3>\n            <div style=\"margin:12px 0 0 0;font-size:16px;\">${html}</div>\n        </div>`;
+        modal.style.display = 'flex';
+        document.getElementById('close-user-info-modal').onclick = () => { modal.style.display = 'none'; };
+        modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    }
     refreshAll();
 });
 

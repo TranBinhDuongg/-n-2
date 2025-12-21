@@ -88,9 +88,7 @@ function saveDB() {
 /* ---------- KPI & Rendering ---------- */
 
 function renderKPIs() {
-    const displayName = currentUser?.fullName || 'Nông dân';
-    const nameEl = document.querySelector('.sidebar-header span') || document.getElementById('current-user');
-    if (nameEl) nameEl.textContent = displayName;
+    // Không set lại tên ở đây để tránh lặp tên ở sidebar
     document.getElementById('kpi-farms').textContent = DB.farms.length;
     document.getElementById('kpi-batches').textContent = DB.batches.length;
     document.getElementById('kpi-orders').textContent = DB.orders.length;
@@ -104,7 +102,7 @@ function renderFarms() {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${f.id}</td><td>${f.name}</td><td>${f.address}</td><td>${f.cert || '-'}</td>
             <td><button class="btn small" onclick="editFarm('${f.id}')">Sửa</button>
-                <button class="btn small" onclick="deleteFarm('${f.id}')">Xóa</button></td>`;
+                <button class="btn small btn-danger" onclick="deleteFarm('${f.id}')">Xóa</button></td>`;
         tbody.appendChild(tr);
     });
 }
@@ -120,7 +118,7 @@ function renderBatches() {
         tr.className = status === 'expired' ? 'critical' : (status === 'warning' ? 'warning' : '');
         tr.innerHTML = `<td>${b.id}</td><td>${b.farmName}</td><td>${b.product}</td><td>${b.quantity}</td><td>${expiry}</td><td>${status}</td>
             <td><button class="btn small" onclick="editBatch('${b.id}')">Sửa</button>
-                <button class="btn small" onclick="deleteBatch('${b.id}')">Xóa</button></td>`;
+                <button class="btn small btn-danger" onclick="deleteBatch('${b.id}')">Xóa</button></td>`;
         tbody.appendChild(tr);
     });
 }
@@ -511,26 +509,6 @@ window.deleteBatch = function(id) {
 
 /* ---------- Orders Management (nhận đơn hàng + xuất hàng) ---------- */
 
-document.getElementById('btn-new-order')?.addEventListener('click', () => {
-    const batchOptions = DB.batches.map(b => `<option value="${b.id}">${b.product} (${b.quantity} đơn vị)</option>`).join('');
-    const khoOptions = loadDailyKhos().map(k => `<option value="${k.maKho}">${k.tenKho}</option>`).join('');
-    const today = new Date().toISOString().split('T')[0];
-    
-    openModal(`
-        <h3>Xuất hàng (Tạo đơn hàng)</h3>
-        <label>Lô sản phẩm</label>
-        <select id="order-batch">${batchOptions || '<option>Chưa có lô</option>'}</select>
-        <label>Số lượng xuất</label><input id="order-qty" type="number" min="1" />
-        <label>Người/Địa chỉ nhận</label><input id="order-recipient" placeholder="Tên người nhận hoặc địa chỉ" />
-        <label>Kho xuất (chọn từ Đại lý)</label>
-        <select id="order-kho">${khoOptions || '<option value="">Chưa có kho</option>'}</select>
-        <label>Ngày xuất</label><input id="order-date" type="date" value="${today}" />
-        <div style="margin-top:10px">
-            <button onclick="saveOrder()" class="btn">Xuất hàng</button>
-            <button onclick="closeModal()" class="btn" style="background:#ccc;color:#333;">Hủy</button>
-        </div>
-    `);
-});
 
 window.saveOrder = function(id = null) {
     const batchId = document.getElementById('order-batch').value;
@@ -595,11 +573,83 @@ window.addEventListener('DOMContentLoaded', () => {
     loadCurrentUser();
     loadDB();
     
-    // Display current user info
+    // Display current user info (chỉ tên, không icon)
     const userDisplay = document.getElementById('current-user');
     if (userDisplay && currentUser) {
-        userDisplay.innerHTML = `<strong>👤 ${currentUser.fullName || 'Nông dân'}</strong>`;
+        userDisplay.textContent = currentUser.fullName || 'Nông dân';
+            userDisplay.addEventListener('click', function() {
+                // Fake data dựa đúng trường đăng ký tài khoản
+                const fakeUser = {
+                    fullName: 'Nguyễn Văn A',
+                    username: 'nongdan123',
+                    email: 'nongdan.a@example.com',
+                    phone: '0987 654 321',
+                    role: 'Nông dân',
+                    province: 'Hòa Bình',
+                    district: 'Cao Phong',
+                    address: 'Ấp 1, Xã Bình Minh',
+                    farmName: 'Trang trại Hòa Bình',
+                    farmArea: '5',
+                    cropType: 'Rau củ',
+                    certification: 'VietGAP',
+                    createdAt: '2025-12-01T09:00:00',
+                    id: 'ND123456'
+                };
+                // Avatar SVG
+                const avatar = `<div style="display:flex;justify-content:center;align-items:center;margin-bottom:16px;"><div style="background:linear-gradient(135deg,#4caf50,#388e3c);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0002;"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"44\" height=\"44\" viewBox=\"0 0 24 24\" fill=\"#fff\"><path d=\"M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z\"/></svg></div></div>`;
+                // Thông tin chi tiết
+                const infoTable = `
+                    <table style=\"width:100%;border-collapse:separate;border-spacing:0 12px 0 18px;font-size:16px;\">
+                        <colgroup><col style=\"width:180px;\"><col style=\"width:auto;\"></colgroup>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Họ tên</td><td style=\"font-weight:600;\">${fakeUser.fullName}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Tên đăng nhập</td><td>${fakeUser.username}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Email</td><td>${fakeUser.email}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Số điện thoại</td><td>${fakeUser.phone}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Vai trò</td><td>${fakeUser.role}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Tỉnh/Thành phố</td><td>${fakeUser.province}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Quận/Huyện</td><td>${fakeUser.district}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Địa chỉ</td><td>${fakeUser.address}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Tên trang trại</td><td>${fakeUser.farmName}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Diện tích (ha)</td><td>${fakeUser.farmArea}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Loại nông sản chính</td><td>${fakeUser.cropType}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Chứng nhận</td><td>${fakeUser.certification}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Ngày tạo tài khoản</td><td>${new Date(fakeUser.createdAt).toLocaleString('vi-VN')}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">ID người dùng</td><td>${fakeUser.id}</td></tr>
+                    </table>`;
+                // Giao diện đẹp hơn
+                showUserInfoModal(`
+                    ${avatar}
+                    <div style=\"margin-bottom:12px;text-align:center;font-size:18px;font-weight:600;color:#388e3c;letter-spacing:0.5px;\">Thông tin cá nhân</div>
+                    <div style=\"padding:0 8px 8px 8px;\">${infoTable}</div>
+                `);
+            });
     }
     
     refreshAll();
+    // Modal hiển thị thông tin user
+    function showUserInfoModal(html) {
+        let modal = document.getElementById('modal-user-info');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-user-info';
+            modal.style.position = 'fixed';
+            modal.style.top = '0';
+            modal.style.left = '0';
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.3)';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = '9999';
+            document.body.appendChild(modal);
+        }
+            modal.innerHTML = `<div style="background:#fff;padding:32px 48px 32px 48px;border-radius:14px;min-width:420px;max-width:98vw;box-shadow:0 4px 32px #0003;position:relative;animation:fadeIn .25s;">
+                <button id=\"close-user-info-modal\" style=\"position:absolute;top:12px;right:18px;font-size:24px;background:none;border:none;cursor:pointer;color:#388e3c;transition:color .2s;\" onmouseover=\"this.style.color='#d32f2f'\" onmouseout=\"this.style.color='#388e3c'\">&times;</button>
+                <div>${html}</div>
+            </div>`;
+        modal.style.display = 'flex';
+        document.getElementById('close-user-info-modal').onclick = () => { modal.style.display = 'none'; };
+        modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    }
 });

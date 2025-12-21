@@ -88,10 +88,12 @@ function getKhoName(maKho) {
 // Helper: interpret quality result as pass
 function isKiemDinhPassed(kq) {
     if (!kq) return false;
-    const v = String(kq).trim().toLowerCase();
-    // remove diacritics to compare base letters
-    const base = v.normalize('NFD').replace(/\p{Diacritic}/gu, '');
-    return base === 'dat' || base === 'pass' || base === 'passed' || base.includes('dat') || base.includes('pass');
+    // Loại bỏ dấu, khoảng trắng, ký tự đặc biệt, chuyển về chữ thường
+    let v = String(kq).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+    v = v.replace(/[^a-z0-9]/g, '');
+    console.log('[DEBUG isKiemDinhPassed] ketQua goc:', kq, '| sau xu ly:', v);
+    // Chỉ so sánh với các giá trị không dấu
+    return v === 'at' || v === 'pass' || v === 'passed' || v.includes('dat') || v.includes('pass');
 }
 
 function isStatusPending(s) {
@@ -139,26 +141,25 @@ function renderReports() {
     const elStock = document.getElementById('report-stock');
     const elQuality = document.getElementById('report-quality');
     // compute totals similar to Nongdan reports
-    const totalReceived = (DB.phieuNhap || []).reduce((s, r) => s + (parseFloat(r.soLuong) || 0), 0);
-    // shipped: count market orders that involve this daily (either sent from this daily or shipped to this daily)
+    // Tổng đơn hàng nhập (số phiếu nhập)
+    const totalOrders = (DB.phieuNhap || []).length;
+    // Đã xuất hàng: số đơn hàng thị trường đã xuất từ đại lý này hoặc gửi tới đại lý này
     let marketAll = [];
     try { marketAll = JSON.parse(localStorage.getItem('market_orders') || '[]'); } catch (e) { marketAll = []; }
-    const shippedFromDaily = marketAll.filter(m => String(m.fromDailyUserId) === String(currentUser?.id) && (String(m.status).toLowerCase().includes('ship') || String(m.status).toLowerCase().includes('xuất') || String(m.status).toLowerCase().includes('shipped')))
-        .reduce((s, m) => s + (parseFloat(m.soLuong) || 0), 0);
-    const shippedToDaily = marketAll.filter(m => String(m.toDailyAgency) === String(currentUser?.maDaiLy) && (String(m.status).toLowerCase().includes('ship') || String(m.status).toLowerCase().includes('xuất') || String(m.status).toLowerCase().includes('shipped')))
-        .reduce((s, m) => s + (parseFloat(m.soLuong) || 0), 0);
+    const shippedFromDaily = marketAll.filter(m => String(m.fromDailyUserId) === String(currentUser?.id) && (String(m.status).toLowerCase().includes('ship') || String(m.status).toLowerCase().includes('xuất') || String(m.status).toLowerCase().includes('shipped'))).length;
+    const shippedToDaily = marketAll.filter(m => String(m.toDailyAgency) === String(currentUser?.maDaiLy) && (String(m.status).toLowerCase().includes('ship') || String(m.status).toLowerCase().includes('xuất') || String(m.status).toLowerCase().includes('shipped'))).length;
     const totalShipped = shippedFromDaily + shippedToDaily;
 
-    // current stock by batches
+    // current stock by batches (giữ nguyên là tổng số lượng sản phẩm)
     const totalStock = (DB.lohang || []).reduce((s, b) => s + (parseFloat(b.soLuong) || 0), 0);
 
     const totalChecks = (DB.kiemDinh || []).length;
     const passed = (DB.kiemDinh || []).filter(k => (k.ketQua || '').toLowerCase() === 'đạt' || (k.ketQua || '').toLowerCase() === 'dat' || (k.ketQua || '').toLowerCase().includes('dat')).length;
     const passPercent = totalChecks ? Math.round((passed / totalChecks) * 100) : 0;
 
-    if (elOrders) elOrders.textContent = totalReceived + ' đơn vị';
-    if (elShipped) elShipped.textContent = totalShipped + ' đơn vị';
-    if (elStock) elStock.textContent = totalStock + ' đơn vị';
+    if (elOrders) elOrders.textContent = totalOrders + ' đơn';
+    if (elShipped) elShipped.textContent = totalShipped + ' đơn';
+    if (elStock) elStock.textContent = totalStock + ' sản phẩm';
     if (elQuality) elQuality.textContent = `${passed}/${totalChecks} (${passPercent}%)`;
 }
 
@@ -298,7 +299,7 @@ function renderInventory() {
             <td>${(l.soLuong || 0) > 0 ? 'Còn hàng' : 'Hết'}</td>
             <td>
                 <button class="btn small" onclick="editLohang('${l.maLo}')">Sửa</button>
-                <button class="btn small" onclick="deleteLohang('${l.maLo}')">Xóa</button>
+                <button class="btn small btn-danger" onclick="deleteLohang('${l.maLo}')">Xóa</button>
             </td>
         `;
         tbody.appendChild(tr);
@@ -606,8 +607,9 @@ function renderKho() {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${k.maKho}</td><td>${k.tenKho}</td><td>${k.diaChi || ''}</td><td>${k.soDienThoai || ''}</td>
             <td><button class="btn small" onclick="editKho('${k.maKho}')">Sửa</button>
-                <button class="btn small" onclick="deleteKho('${k.maKho}')">Xóa</button></td>`;
+                <button class="btn small btn-danger" onclick="deleteKho('${k.maKho}')">Xóa</button></td>`;
         tbody.appendChild(tr);
+        // Đã xóa phần hiển thị sản phẩm trong kho
     });
 }
 
@@ -761,6 +763,7 @@ function saveKiemDinh(existingId = null) {
         // refresh UI
         try { renderReceiptsFromDB(); } catch (e) {}
         try { renderInventory(); } catch (e) {}
+        try { renderKho(); } catch (e) {}
         try { updateKPIs(); } catch (e) {}
     } else {
         related.forEach(r => { r.status = 'Không đạt - Chờ xử lý'; });
@@ -780,7 +783,7 @@ function renderKiemDinh() {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${k.maKiemDinh}</td><td>${k.maLo}</td><td>${k.ngayKiem}</td><td>${k.nguoiKiem}</td><td>${k.ketQua}</td><td>${k.ghiChu || ''}</td>
             <td><button class="btn small" onclick="editKiemDinh('${k.maKiemDinh}')">Kiểm định</button>
-                <button class="btn small" onclick="deleteKiemDinh('${k.maKiemDinh}')">Xóa</button></td>`;
+                <button class="btn small btn-danger" onclick="deleteKiemDinh('${k.maKiemDinh}')">Xóa</button></td>`;
         tbody.appendChild(tr);
     });
 }
@@ -808,13 +811,6 @@ window.deleteKiemDinh = function(maKiemDinh) {
 };
 
 // Wire create quality button
-document.getElementById('btn-create-quality')?.addEventListener('click', () => {
-    openModalWithTemplate('quality-template');
-    setTimeout(() => {
-        const form = modalBody.querySelector('#createQualityFormModal');
-        if (form) form.onsubmit = (e) => { e.preventDefault(); saveKiemDinh(); };
-    }, 10);
-});
 
 // open create order modal from header/dashboard or orders page
 document.querySelectorAll('#btn-create-order, #btn-new-order').forEach(btn => {
@@ -1331,7 +1327,52 @@ window.addEventListener('DOMContentLoaded', () => {
     const agencyDisplay = document.getElementById('current-agency');
     
     if (userDisplay) {
-        userDisplay.innerHTML = `<strong>👤 ${currentUser?.fullName || 'User'}</strong>`;
+        userDisplay.textContent = currentUser?.fullName || 'Đại lý';
+        userDisplay.style.cursor = 'pointer';
+        userDisplay.title = 'Xem thông tin cá nhân';
+        userDisplay.addEventListener('click', function() {
+            // Fake data cho đại lý
+            const fakeUser = {
+                fullName: 'Trần Thị B',
+                username: 'daily456',
+                email: 'daily.b@example.com',
+                phone: '0912 345 678',
+                role: 'Đại lý',
+                companyName: 'Công ty Vận tải B',
+                taxCode: '1234567890',
+                vehicleCount: '12',
+                serviceArea: 'Hà Nội, Hải Phòng, Bắc Ninh',
+                province: 'Hà Nội',
+                district: 'Quận Long Biên',
+                address: 'Số 88, Đường Nguyễn Văn Cừ',
+                createdAt: '2025-11-15T10:00:00',
+                id: 'DL654321'
+            };
+            const avatar = `<div style="display:flex;justify-content:center;align-items:center;margin-bottom:16px;"><div style="background:linear-gradient(135deg,#4caf50,#388e3c);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0002;"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"44\" height=\"44\" viewBox=\"0 0 24 24\" fill=\"#fff\"><path d=\"M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z\"/></svg></div></div>`;
+            const infoTable = `
+                <table style=\"width:100%;border-collapse:separate;border-spacing:0 12px 0 18px;font-size:16px;\">
+                    <colgroup><col style=\"width:180px;\"><col style=\"width:auto;\"></colgroup>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Họ tên</td><td style=\"font-weight:600;\">${fakeUser.fullName}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Tên đăng nhập</td><td>${fakeUser.username}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Email</td><td>${fakeUser.email}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Số điện thoại</td><td>${fakeUser.phone}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Vai trò</td><td>${fakeUser.role}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Tỉnh/Thành phố</td><td>${fakeUser.province}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Quận/Huyện</td><td>${fakeUser.district}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Địa chỉ</td><td>${fakeUser.address}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Tên công ty/Đại lý</td><td>${fakeUser.companyName}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Mã số thuế</td><td>${fakeUser.taxCode}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Số xe vận chuyển</td><td>${fakeUser.vehicleCount}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Khu vực hoạt động</td><td>${fakeUser.serviceArea}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">Ngày tạo tài khoản</td><td>${new Date(fakeUser.createdAt).toLocaleString('vi-VN')}</td></tr>
+                    <tr><td style=\"color:#888;padding-right:32px;\">ID người dùng</td><td>${fakeUser.id}</td></tr>
+                </table>`;
+            showUserInfoModal(`
+                ${avatar}
+                <div style=\"margin-bottom:12px;text-align:center;font-size:18px;font-weight:600;color:#388e3c;letter-spacing:0.5px;\">Thông tin cá nhân</div>
+                <div style=\"padding:0 8px 8px 8px;\">${infoTable}</div>
+            `);
+        });
     }
     
     if (agencyDisplay) {
@@ -1346,6 +1387,30 @@ window.addEventListener('DOMContentLoaded', () => {
     renderKiemDinh();
     renderInventory();
     updateKPIs();
+    renderReports();
+    // Modal hiển thị thông tin user
+    function showUserInfoModal(html) {
+        let modal = document.getElementById('modal-user-info');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-user-info';
+            modal.style.position = 'fixed';
+            modal.style.top = '0';
+            modal.style.left = '0';
+            modal.style.width = '100vw';
+            modal.style.height = '100vh';
+            modal.style.background = 'rgba(0,0,0,0.3)';
+            modal.style.display = 'flex';
+            modal.style.alignItems = 'center';
+            modal.style.justifyContent = 'center';
+            modal.style.zIndex = '9999';
+            document.body.appendChild(modal);
+        }
+        modal.innerHTML = `<div style=\"background:#fff;padding:24px 32px;border-radius:8px;min-width:260px;max-width:90vw;box-shadow:0 2px 16px #0002;position:relative;\">\n            <button id=\"close-user-info-modal\" style=\"position:absolute;top:8px;right:12px;font-size:20px;background:none;border:none;cursor:pointer;\">&times;</button>\n            <h3 style=\"margin-top:0\">Thông tin cá nhân</h3>\n            <div style=\"margin:12px 0 0 0;font-size:16px;\">${html}</div>\n        </div>`;
+        modal.style.display = 'flex';
+        document.getElementById('close-user-info-modal').onclick = () => { modal.style.display = 'none'; };
+        modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+    }
     // Load any market orders that have been shipped to this daily so they can confirm receipt
     try { loadMarketOrdersForDaily(); } catch (e) { /* ignore */ }
     // Load incoming retail orders from supermarkets
@@ -1358,11 +1423,13 @@ window.addEventListener('DOMContentLoaded', () => {
         const panelRetail = document.getElementById('orders-retail');
         function showOrdersTab(t) {
             if (!panelImport || !panelRetail || !tabImport || !tabRetail) return;
+            const btnCreateOrder = document.getElementById('btn-create-order');
             if (t === 'retail') {
                 panelImport.style.display = 'none';
                 panelRetail.style.display = '';
                 tabImport.classList.remove('active');
                 tabRetail.classList.add('active');
+                if (btnCreateOrder) btnCreateOrder.style.display = 'none';
                 // render retail list when switching
                 try { loadRetailOrdersForDaily(); } catch (e) {}
             } else {
@@ -1370,6 +1437,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 panelRetail.style.display = 'none';
                 tabImport.classList.add('active');
                 tabRetail.classList.remove('active');
+                if (btnCreateOrder) btnCreateOrder.style.display = '';
                 // ensure receipts are rendered
                 try { renderReceiptsFromDB(); } catch (e) {}
             }

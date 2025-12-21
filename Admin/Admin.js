@@ -1,3 +1,84 @@
+// ========== DATA AGGREGATION FROM ALL APPS ==========
+function getAllUsers() {
+    // Lấy từ localStorage của các app
+    let users = [];
+    try {
+        const nd = JSON.parse(localStorage.getItem('users') || '[]');
+        users = users.concat(nd);
+    } catch(e){}
+    try {
+        const dl = JSON.parse(localStorage.getItem('dailyAgencies') || '[]');
+        users = users.concat(dl);
+    } catch(e){}
+    try {
+        const st = JSON.parse(localStorage.getItem('sieuthiAgencies') || '[]');
+        users = users.concat(st);
+    } catch(e){}
+    return users;
+}
+
+function getAllBatches() {
+    let batches = [];
+    try {
+        batches = batches.concat(JSON.parse(localStorage.getItem('lohang') || '[]'));
+    } catch(e){}
+    return batches;
+}
+
+function getAllOrders() {
+    let orders = [];
+    try {
+        orders = orders.concat(JSON.parse(localStorage.getItem('market_orders') || '[]'));
+    } catch(e){}
+    try {
+        orders = orders.concat(JSON.parse(localStorage.getItem('retail_orders') || '[]'));
+    } catch(e){}
+    return orders;
+}
+
+// ========== RENDER TO ADMIN UI ==========
+function renderAdminUsers() {
+    const users = getAllUsers();
+    const tb = document.getElementById('table-admin-users');
+    if (!tb) return;
+    tb.innerHTML = '';
+    users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${u.id||u.maDaiLy||u.maNong||''}</td><td>${u.fullName||u.tenDaiLy||u.tenNong||u.username||''}</td><td>${u.role||u.loai||''}</td>`;
+        tb.appendChild(tr);
+    });
+}
+
+function renderAdminBatches() {
+    const batches = getAllBatches();
+    const tb = document.getElementById('table-admin-batches');
+    if (!tb) return;
+    tb.innerHTML = '';
+    batches.forEach(b => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${b.maLo}</td><td>${b.sanPham}</td><td>${b.soLuong}</td><td>${b.ngayTao||''}</td>`;
+        tb.appendChild(tr);
+    });
+}
+
+function renderAdminOrders() {
+    const orders = getAllOrders();
+    const tb = document.getElementById('table-admin-orders');
+    if (!tb) return;
+    tb.innerHTML = '';
+    orders.forEach(o => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${o.maPhieu||o.uid||''}</td><td>${o.maLo||''}</td><td>${o.sanPham||''}</td><td>${o.soLuong||''}</td><td>${o.status||''}</td>`;
+        tb.appendChild(tr);
+    });
+}
+
+// Gọi các hàm render khi chuyển tab
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelector('[data-section="users"]')?.addEventListener('click', renderAdminUsers);
+    document.querySelector('[data-section="batches"]')?.addEventListener('click', renderAdminBatches);
+    document.querySelector('[data-section="orders"]')?.addEventListener('click', renderAdminOrders);
+});
 // ========== INITIALIZATION & HELPERS ==========
 let currentUser = null;
 
@@ -44,8 +125,64 @@ document.addEventListener('DOMContentLoaded', () => {
     // Display current user
     if (currentUser?.fullName) {
         const userDisplay = document.getElementById('current-user');
-        if (userDisplay) userDisplay.textContent = currentUser.fullName;
+        if (userDisplay) {
+            userDisplay.textContent = currentUser.fullName;
+            userDisplay.style.cursor = 'pointer';
+            userDisplay.title = 'Xem thông tin cá nhân';
+            userDisplay.addEventListener('click', function() {
+                // Fake data cho admin
+                const fakeUser = {
+                    fullName: 'Admin Hệ thống',
+                    username: 'adminsys',
+                    email: 'admin@nongnghiep.vn',
+                    phone: '0999 888 777',
+                    role: 'Admin',
+                    createdAt: '2025-09-01T08:00:00',
+                    id: 'AD0001'
+                };
+                const avatar = `<div style=\"display:flex;justify-content:center;align-items:center;margin-bottom:16px;\"><div style=\"background:linear-gradient(135deg,#4caf50,#388e3c);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0002;\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"44\" height=\"44\" viewBox=\"0 0 24 24\" fill=\"#fff\"><path d=\"M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z\"/></svg></div></div>`;
+                const infoTable = `
+                    <table style=\"width:100%;border-collapse:separate;border-spacing:0 12px 0 18px;font-size:16px;\">
+                        <colgroup><col style=\"width:180px;\"><col style=\"width:auto;\"></colgroup>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Họ tên</td><td style=\"font-weight:600;\">${fakeUser.fullName}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Tên đăng nhập</td><td>${fakeUser.username}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Email</td><td>${fakeUser.email}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Số điện thoại</td><td>${fakeUser.phone}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Vai trò</td><td>${fakeUser.role}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">Ngày tạo tài khoản</td><td>${new Date(fakeUser.createdAt).toLocaleString('vi-VN')}</td></tr>
+                        <tr><td style=\"color:#888;padding-right:32px;\">ID người dùng</td><td>${fakeUser.id}</td></tr>
+                    </table>`;
+                showUserInfoModal(`
+                    ${avatar}
+                    <div style=\"margin-bottom:12px;text-align:center;font-size:18px;font-weight:600;color:#388e3c;letter-spacing:0.5px;\">Thông tin cá nhân</div>
+                    <div style=\"padding:0 8px 8px 8px;\">${infoTable}</div>
+                `);
+            });
+        }
     }
+        // Modal hiển thị thông tin user
+        function showUserInfoModal(html) {
+            let modal = document.getElementById('modal-user-info');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'modal-user-info';
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100vw';
+                modal.style.height = '100vh';
+                modal.style.background = 'rgba(0,0,0,0.3)';
+                modal.style.display = 'flex';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                modal.style.zIndex = '9999';
+                document.body.appendChild(modal);
+            }
+            modal.innerHTML = `<div style=\"background:#fff;padding:24px 32px;border-radius:8px;min-width:260px;max-width:90vw;box-shadow:0 2px 16px #0002;position:relative;\">\n            <button id=\"close-user-info-modal\" style=\"position:absolute;top:8px;right:12px;font-size:20px;background:none;border:none;cursor:pointer;\">&times;</button>\n            <h3 style=\"margin-top:0\">Thông tin cá nhân</h3>\n            <div style=\"margin:12px 0 0 0;font-size:16px;\">${html}</div>\n        </div>`;
+            modal.style.display = 'flex';
+            document.getElementById('close-user-info-modal').onclick = () => { modal.style.display = 'none'; };
+            modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
+        }
     // Display current role (make it friendly)
     if (currentUser?.role) {
         const roleDisplay = document.getElementById('current-role');
@@ -183,7 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
         DB.users.forEach(u => {
             const tr = document.createElement('tr');
             tr.innerHTML = `<td>${u.id}</td><td>${u.hoTen}</td><td>${u.role}</td><td>${u.email}</td>
-                <td><button class="btn small" onclick="deleteUser('${u.id}')">Xóa</button></td>`;
+                <td><button class="btn small btn-danger" onclick="deleteUser('${u.id}')">Xóa</button></td>`;
             tbody.appendChild(tr);
         });
     }
@@ -195,7 +332,7 @@ document.addEventListener('DOMContentLoaded', () => {
         DB.farms.forEach(f => {
             const tr = document.createElement('tr');
             tr.innerHTML = `<td>${f.id}</td><td>${f.ten}</td><td>${f.chu}</td><td>${f.diachi}</td>
-                <td><button class="btn small" onclick="deleteFarm('${f.id}')">Xóa</button></td>`;
+                <td><button class="btn small btn-danger" onclick="deleteFarm('${f.id}')">Xóa</button></td>`;
             tbody.appendChild(tr);
         });
     }
@@ -218,7 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         DB.orders.forEach(o => {
             const tr = document.createElement('tr');
             tr.innerHTML = `<td>${o.ma}</td><td>${o.nguoi}</td><td>${o.daily}</td><td>${o.soLuong}</td><td>${o.trangThai}</td>
-                <td><button class="btn small" onclick="deleteOrder('${o.ma}')">Xóa</button></td>`;
+                <td><button class="btn small btn-danger" onclick="deleteOrder('${o.ma}')">Xóa</button></td>`;
             tbody.appendChild(tr);
         });
     }
