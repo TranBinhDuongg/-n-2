@@ -122,6 +122,27 @@ document.addEventListener('DOMContentLoaded', () => {
     loadCurrentUser();
     loadDB();
 
+    // --- Đồng bộ dữ liệu từ các actor vào DB admin ---
+    // Lấy users từ localStorage các actor
+    try {
+        const nd = JSON.parse(localStorage.getItem('users') || '[]');
+        const dl = JSON.parse(localStorage.getItem('dailyAgencies') || '[]');
+        const st = JSON.parse(localStorage.getItem('sieuthiAgencies') || '[]');
+        DB.users = [...nd, ...dl, ...st];
+    } catch(e){}
+    // Lấy batches (lô hàng)
+    try {
+        DB.batches = JSON.parse(localStorage.getItem('lohang') || '[]');
+    } catch(e){}
+    // Lấy orders
+    try {
+        const marketOrders = JSON.parse(localStorage.getItem('market_orders') || '[]');
+        const retailOrders = JSON.parse(localStorage.getItem('retail_orders') || '[]');
+        DB.orders = [...marketOrders, ...retailOrders];
+    } catch(e){}
+    // Lưu lại vào localStorage admin
+    saveDB();
+
     // Display current user
     if (currentUser?.fullName) {
         const userDisplay = document.getElementById('current-user');

@@ -107,7 +107,7 @@ function renderDashboard() {
 
 function renderOrders() {
     renderTable('#table-orders-all', DB.orders || [], o => `
-        <td>${o.maPhieu}</td><td>${o.sanPham}</td><td>${o.soLuong}</td><td>${o.toDaily || o.toDailyAgency || ''}</td><td>${o.ngayTao || ''}</td><td>${o.status || ''}</td>
+        <td>${o.maPhieu}</td><td>${o.maLo || ''}</td><td>${o.sanPham}</td><td>${o.soLuong}</td><td>${o.toDaily || o.toDailyAgency || ''}</td><td>${o.ngayTao || ''}</td><td>${o.status || ''}</td>
         <td>
             <button class="btn small" onclick="editOrder('${o.uid}')">Sửa</button>
             <button class="btn small btn-danger" onclick="deleteOrder('${o.uid}')">Xóa</button>
