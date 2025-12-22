@@ -1,10 +1,10 @@
-// ========== LOCALSTORAGE HELPERS (Per-user isolation - Same as Nongdan.js) ==========
+// ====== HÀM HỖ TRỢ LOCALSTORAGE (Dữ liệu riêng từng người dùng) ======
 let currentUser = null;
 
 function loadCurrentUser() {
     const stored = sessionStorage.getItem('currentUser');
     if (!stored) {
-        // redirect to login if no user session
+        // Chuyển hướng về trang đăng nhập nếu chưa đăng nhập
         window.location.href = '/Dangnhap/Dangnhap.html';
         return null;
     }
@@ -29,7 +29,7 @@ function saveUserData(key, data) {
     localStorage.setItem(storageKey, JSON.stringify(data));
 }
 
-// ========== DATABASE STRUCTURE ==========
+// ====== CẤU TRÚC DỮ LIỆU (ĐẠI LÝ) ======
 const DB = {
     nongdan: JSON.parse(localStorage.getItem('nongdan') || '[]'),      
     lohang: JSON.parse(localStorage.getItem('lohang') || '[]'),        
@@ -47,7 +47,7 @@ function loadDB() {
 
 // Clear old non-per-user data that may have been stored with old format
 function clearOldDataFormat() {
-    // Remove old keys that don't follow per-user format
+    // Xóa các key cũ không theo định dạng từng người dùng
     const oldKeys = ['phieuNhap', 'kho', 'kiemDinh'];
     oldKeys.forEach(key => {
         // Only clear if it looks like old shared format (not per-user)
@@ -67,25 +67,25 @@ function clearOldDataFormat() {
 }
 
 function saveDB() {
-    // Save per-user data with user_${id}_ prefix
+    // Lưu dữ liệu từng người dùng với tiền tố user_${id}_
     saveUserData('phieuNhap', DB.phieuNhap);
     saveUserData('kho', DB.kho);
     saveUserData('kiemDinh', DB.kiemDinh);
     
-    // Save shared data globally
+    // Lưu dữ liệu dùng chung toàn hệ thống
     localStorage.setItem('nongdan', JSON.stringify(DB.nongdan));
     localStorage.setItem('lohang', JSON.stringify(DB.lohang));
     localStorage.setItem('dailyAgencies', JSON.stringify(DB.dailyAgencies));
 }
 
-// Helper: Get warehouse name from code (maKho)
+// Lấy tên kho từ mã kho
 function getKhoName(maKho) {
     if (!maKho) return '';
     const kho = DB.kho.find(k => k.maKho === maKho);
     return kho ? kho.tenKho : maKho;
 }
 
-// Helper: interpret quality result as pass
+// Kiểm tra kết quả kiểm định đạt hay không
 function isKiemDinhPassed(kq) {
     if (!kq) return false;
     // Loại bỏ dấu, khoảng trắng, ký tự đặc biệt, chuyển về chữ thường
@@ -103,7 +103,7 @@ function isStatusPending(s) {
     return base.includes('cho') || base.includes('pending') || base.includes('kiem');
 }
 
-// Normalize various status strings into canonical status codes
+// Chuẩn hóa trạng thái về mã trạng thái chuẩn
 function mapStatusToCode(s) {
     if (!s && s !== '') return '';
     const v = String(s || '').trim().toLowerCase();
@@ -132,7 +132,7 @@ function statusDisplay(codeOrRaw) {
     }
 }
 
-// Render reports (statistics) based on current DB state
+// Hiển thị báo cáo thống kê
 function renderReports() {
     // ensure DOM elements exist
     if (typeof document === 'undefined') return;
@@ -140,7 +140,6 @@ function renderReports() {
     const elShipped = document.getElementById('report-shipped');
     const elStock = document.getElementById('report-stock');
     const elQuality = document.getElementById('report-quality');
-    // compute totals similar to Nongdan reports
     // Tổng đơn hàng nhập (số phiếu nhập)
     const totalOrders = (DB.phieuNhap || []).length;
     // Đã xuất hàng: số đơn hàng thị trường đã xuất từ đại lý này hoặc gửi tới đại lý này
@@ -163,7 +162,7 @@ function renderReports() {
     if (elQuality) elQuality.textContent = `${passed}/${totalChecks} (${passPercent}%)`;
 }
 
-// Seed sample data for development/demo - only seed shared data, per-user data seeded per user
+// Tạo dữ liệu mẫu cho phát triển/demo
 function seedSampleData() {
     let changed = false;
     
@@ -240,8 +239,7 @@ function seedSampleData() {
     if (changed) saveDB();
 }
 
-// Adjust stock levels in `DB.lohang` when receipts or shipments occur.
-// `delta` is positive to increase stock (nhập), negative to decrease (xuất).
+// Điều chỉnh tồn kho khi nhập/xuất hàng (delta > 0: nhập, < 0: xuất)
 function adjustStockOnReceipt(receipt, delta) {
     if (!receipt || !receipt.maLo) return;
     const amt = parseFloat(delta) || 0;
@@ -262,7 +260,7 @@ function adjustStockOnReceipt(receipt, delta) {
     }
 }
 
-// Add received quantity into a specific warehouse (per-daily kho)
+// Thêm số lượng vào kho cụ thể
 function addToWarehouse(maKho, maLo, sanPham, qty) {
     if (!maKho) return;
     const amount = parseFloat(qty) || 0;
@@ -284,7 +282,7 @@ function addToWarehouse(maKho, maLo, sanPham, qty) {
     }
 }
 
-// Render inventory table from `DB.lohang` (tồn kho by batch)
+// Hiển thị bảng tồn kho từ DB.lohang
 function renderInventory() {
     const tbody = document.querySelector('#table-inventory tbody');
     if (!tbody) return;
@@ -324,7 +322,7 @@ window.editLohang = function(maLo) {
     }
 };
 
-// Open edit modal for an existing receipt (phiếu nhập)
+// Mở modal sửa phiếu nhập
 function openEditReceipt(maPhieu) {
     const rec = (DB.phieuNhap || []).find(r => r.maPhieu === maPhieu);
     if (!rec) return;
@@ -430,7 +428,7 @@ modal.addEventListener('click', (e) => {
     if (e.target === modal) closeModal();
 });
 
-// Initialize the create-order modal: populate farmer and product selects from SQL schema
+// Khởi tạo modal tạo phiếu nhập: điền nông dân và sản phẩm
 function initCreateOrderModal() {
     const farmerSelect = modalBody.querySelector('select[name="farmerId"]');
     const fromManual = modalBody.querySelector('input[name="fromAddressManual"]');
@@ -508,15 +506,15 @@ function initCreateOrderModal() {
             return;
         }
 
-        // selected a farmer id -> hide manual farmer input
+        // Đã chọn nông dân -> Ẩn ô nhập nông dân thủ công
         fromManual.style.display = 'none';
         productManual.style.display = 'none';
 
-        // Find products associated with this farmer from LôHàng table.
-        // Match by multiple identifiers because DB.lohang may use maNong codes (e.g. 'ND001')
+        // Tìm sản phẩm liên quan đến nông dân này từ bảng LôHàng.
+        // So khớp theo nhiều định danh vì DB.lohang có thể dùng mã nông dân (ví dụ: 'ND001')
         const users = JSON.parse(localStorage.getItem('users') || '[]');
         const farmerUser = users.find(u => String(u.id) === String(fid));
-        // Prepare a combined batches list: include shared DB.lohang and farmer's own per-user batches
+        // Chuẩn bị danh sách lô hàng kết hợp: gồm DB.lohang dùng chung và lô hàng riêng của nông dân
         let allBatches = Array.isArray(batches) ? batches.slice() : [];
         try {
             if (farmerUser && farmerUser.id) {
@@ -537,7 +535,7 @@ function initCreateOrderModal() {
             if (farmerUser.hoTen) ids.add(String(farmerUser.hoTen));
         }
 
-        // Fallback: try to map registered farmer user to DB.nongdan (seeded maNong codes)
+        // Trường hợp không tìm thấy: thử ánh xạ user nông dân sang DB.nongdan (mã maNong)
         try {
             const ndList = Array.isArray(DB.nongdan) ? DB.nongdan : JSON.parse(localStorage.getItem('nongdan') || '[]');
             if (farmerUser && ndList.length) {
@@ -563,7 +561,7 @@ function initCreateOrderModal() {
             .filter(Boolean);
         const unique = [...new Set(prods)];
 
-        // If no suggestions found, try direct lookup by maNong from DB.lohang using DB.nongdan mapping
+        // Nếu không có gợi ý, thử tìm trực tiếp theo maNong từ DB.lohang qua DB.nongdan
         if (unique.length === 0 && farmerUser) {
             let fallbackProds = [];
             try {
@@ -590,7 +588,7 @@ function initCreateOrderModal() {
             productSelect.disabled = false;
             productManual.style.display = 'none';
         } else {
-            // no product suggestions -> let user type
+            // Không có gợi ý sản phẩm -> cho phép người dùng nhập tay
             productSelect.appendChild(new Option('Không có loại gợi ý', 'manual'));
             productSelect.disabled = true;
             productManual.style.display = 'block';
@@ -598,7 +596,7 @@ function initCreateOrderModal() {
     });
 }
 
-// ------------------ Warehouse (Kho) Management ------------------
+// ====== Quản lý kho ======
 function renderKho() {
     const tbody = document.querySelector('#table-kho tbody');
     if (!tbody) return;
@@ -664,11 +662,10 @@ document.getElementById('btn-add-nhap-hang')?.addEventListener('click', () => {
     }, 10);
 });
 
-// Tab handling for Inventory page
-// Import/Export tab switch removed — content displays are controlled by page navigation now.
+// Tab chuyển trang tồn kho (đã bỏ import/export tab, dùng chuyển trang)
 
-// ------------------ Quality (Kiểm định) Management ------------------
-// create DB.kiemDinh if not present
+// ====== Quản lý kiểm định chất lượng ======
+// Tạo DB.kiemDinh nếu chưa có
 if (!Array.isArray(DB.kiemDinh)) DB.kiemDinh = JSON.parse(localStorage.getItem('kiemDinh') || '[]');
 
 function saveKiemDinh(existingId = null) {
@@ -809,7 +806,7 @@ window.deleteKiemDinh = function(maKiemDinh) {
     renderKiemDinh();
 };
 
-// Wire create quality button
+// Gắn nút tạo phiếu kiểm định
 
 // open create order modal from header/dashboard or orders page
 document.querySelectorAll('#btn-create-order, #btn-new-order').forEach(btn => {
@@ -824,8 +821,7 @@ document.addEventListener('click', (e) => {
     if (e.target?.classList?.contains('modal-close-btn')) closeModal();
 });
 
-// Helper to add a row and attach listeners
-// Displays PhiếuNhậpHàng (Receipt) data with SQL schema fields
+// Thêm dòng vào bảng và gắn sự kiện (hiển thị phiếu nhập)
 function addOrderRow(tableSelector, data) {
     const table = document.querySelector(tableSelector + ' tbody');
     if (!table) return;
@@ -913,10 +909,9 @@ function addOrderRow(tableSelector, data) {
     });
 }
 
-// Export feature removed: phieuXuat and related UI/handlers were deleted per request.
+// Đã bỏ tính năng xuất hàng (phieuXuat)
 
-// Handle form submit for the modal create order form (delegated)
-// Saves data according to SQL schema: PhiếuNhậpHàng (Receipt)
+// Xử lý submit form tạo phiếu nhập (lưu theo cấu trúc SQL)
 document.addEventListener('submit', (e) => {
     const form = e.target;
     if (form && form.id === 'createOrderFormModal') {
@@ -981,7 +976,7 @@ document.addEventListener('submit', (e) => {
     }
 });
 
-// Load shipped market orders that belong to this daily (so daily can mark received)
+// Tải đơn hàng thị trường đã xuất về đại lý này
 function loadMarketOrdersForDaily() {
     const all = JSON.parse(localStorage.getItem('market_orders') || '[]');
     const my = all.filter(m => String(m.fromDailyUserId) === String(currentUser?.id));
@@ -1033,7 +1028,7 @@ window.markMarketOrderReceived = function(maPhieu) {
     try { renderReports(); } catch (e) {}
 };
 
-// ------------ Retail orders from Supermarkets (Sieuthi -> Daily) ------------
+// ====== Đơn bán lẻ từ Siêu thị về Đại lý ======
 function loadRetailOrdersForDaily() {
     try {
         const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
@@ -1275,7 +1270,7 @@ window.markRetailOrderReceived = function(uid) {
     } catch (e) { console.warn('markRetailOrderReceived failed', e); alert('Lỗi khi nhận đơn'); }
 };
 
-// Form Submissions
+// Xử lý submit các form nhỏ
 document.getElementById('createOrderForm')?.addEventListener('submit', (e) => {
     e.preventDefault();
     alert('Tạo đơn hàng thành công!');
@@ -1328,8 +1323,8 @@ document.querySelectorAll('.btn-delete').forEach(btn => {
     });
 });
 
-// ========== INITIALIZATION ==========
-// Load persisted data and render on page load
+// ====== KHỞI TẠO DỮ LIỆU VÀ GIAO DIỆN ======
+// Tải dữ liệu và hiển thị khi load trang
 window.addEventListener('DOMContentLoaded', () => {
     // Load current user
     loadCurrentUser();
@@ -1406,7 +1401,7 @@ window.addEventListener('DOMContentLoaded', () => {
     renderInventory();
     updateKPIs();
     renderReports();
-    // Modal hiển thị thông tin user
+    // Modal hiển thị thông tin người dùng
     function showUserInfoModal(html) {
         let modal = document.getElementById('modal-user-info');
         if (!modal) {
@@ -1433,7 +1428,7 @@ window.addEventListener('DOMContentLoaded', () => {
     try { loadMarketOrdersForDaily(); } catch (e) { /* ignore */ }
     // Load incoming retail orders from supermarkets
     try { loadRetailOrdersForDaily(); } catch (e) { /* ignore */ }
-    // Initialize Orders toggle controls if present
+    // Khởi tạo nút chuyển tab Đơn nhập/Đơn bán lẻ nếu có
     try {
         const tabImport = document.getElementById('tab-orders-import');
         const tabRetail = document.getElementById('tab-orders-retail');
@@ -1464,7 +1459,7 @@ window.addEventListener('DOMContentLoaded', () => {
         tabRetail?.addEventListener('click', () => showOrdersTab('retail'));
         // default to import tab
         showOrdersTab('import');
-        // Listen for storage changes to refresh views (from other windows)
+        // Lắng nghe thay đổi storage để tự động cập nhật giao diện
         window.addEventListener('storage', (ev) => {
             try {
                 if (!ev.key) return;
@@ -1529,7 +1524,7 @@ function renderReceiptsFromDB() {
         });
     }
     
-    // Render recent receipts in dashboard (limit to last 5)
+    // Hiển thị 5 phiếu nhập gần nhất ở dashboard
     if (dashTable) {
         dashTable.innerHTML = '';
         receipts.slice(0, 5).forEach(receipt => {
@@ -1547,7 +1542,6 @@ function updateKPIs() {
     if (kpiOrders) {
         kpiOrders.textContent = (DB.phieuNhap || []).length;
     }
-    // Shipments KPI removed (phieuXuat deleted)
+    // Đã bỏ KPI xuất hàng (phieuXuat)
 }
 
-console.log('Daily Management System loaded successfully!');

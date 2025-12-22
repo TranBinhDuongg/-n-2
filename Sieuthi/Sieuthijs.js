@@ -1,61 +1,17 @@
 
-// Sieuthi.js - Đại lý Management
+// ====== SIÊU THỊ - QUẢN LÝ ĐƠN HÀNG, KHO, KIỂM ĐỊNH ======
 let currentUser = null;
-
-// Load user from session
+const get = (k, u = currentUser) => u ? JSON.parse(localStorage.getItem(`user_${u.id}_${k}`) || '[]') : [];
+const set = (k, v, u = currentUser) => u && localStorage.setItem(`user_${u.id}_${k}`, JSON.stringify(v));
 function loadCurrentUser() {
-    const stored = sessionStorage.getItem('currentUser');
-    if (!stored) {
-        // No user logged in - redirect or show login
-        return null;
-    }
-    currentUser = JSON.parse(stored);
-    return currentUser;
+  const s = sessionStorage.getItem('currentUser');
+  return (currentUser = s ? JSON.parse(s) : null);
 }
-
-// Storage helpers
-function getUserStorageKey(key) {
-    if (!currentUser) return null;
-    return `user_${currentUser.id}_${key}`;
-}
-
-function loadUserData(key) {
-    const storageKey = getUserStorageKey(key);
-    if (!storageKey) return [];
-    return JSON.parse(localStorage.getItem(storageKey) || '[]');
-}
-
-function saveUserData(key, data) {
-    const storageKey = getUserStorageKey(key);
-    if (!storageKey) return;
-    localStorage.setItem(storageKey, JSON.stringify(data));
-}
-
-// Database (simplified for new supermarket app)
-const DB = {
-    orders: loadUserData('orders') || [],       // orders created by this supermarket
-    kho: loadUserData('kho') || [],             // supermarket's warehouses
-    lohang: loadUserData('lohang') || [],       // per-supermarket batches
-    kiemDinh: loadUserData('kiemDinh') || []    // per-supermarket quality checks
-};
-
-function loadDB() {
-    DB.orders = loadUserData('orders') || [];
-    DB.kho = loadUserData('kho') || [];
-    DB.lohang = loadUserData('lohang') || [];
-    DB.kiemDinh = loadUserData('kiemDinh') || [];
-}
-
-function saveDB() {
-    saveUserData('orders', DB.orders || []);
-    saveUserData('kho', DB.kho || []);
-    saveUserData('lohang', DB.lohang || []);
-    saveUserData('kiemDinh', DB.kiemDinh || []);
-}
-// Get or create modal (nếu không có trong HTML thì tạo)
-let modal = document.getElementById('modal');
-let modalBody = document.getElementById('modal-body');
-
+const DB = { orders: get('orders'), kho: get('kho'), lohang: get('lohang'), kiemDinh: get('kiemDinh') };
+function loadDB() { ['orders','kho','lohang','kiemDinh'].forEach(k=>DB[k]=get(k)); }
+function saveDB() { ['orders','kho','lohang','kiemDinh'].forEach(k=>set(k,DB[k]||[])); }
+// Lấy hoặc tạo modal (nếu chưa có trong HTML thì tự động tạo)
+let modal = document.getElementById('modal'), modalBody = document.getElementById('modal-body');
 if (!modal) {
     modal = document.createElement('div');
     modal.id = 'modal';
@@ -65,56 +21,36 @@ if (!modal) {
     modalBody = document.getElementById('modal-body');
 }
 
+// Hàm hiển thị bảng dữ liệu động
 function renderTable(sel, data, fn) {
     const tb = document.querySelector(sel + ' tbody');
     if (!tb) return;
-    tb.innerHTML = '';
-    data.forEach((r, i) => { const tr = document.createElement('tr'); tr.innerHTML = fn(r, i); tb.appendChild(tr); });
+    tb.innerHTML = data.map((r,i)=>`<tr>${fn(r,i)}</tr>`).join('');
 }
 
+// Gọi tất cả hàm render giao diện chính
 function renderAll() {
-    renderOrders();
-    renderIncoming();
-    renderInventory();
-    renderReports();
-    renderDashboard();
+    [renderOrders,renderIncoming,renderInventory,renderReports,renderDashboard].forEach(f=>f());
 }
 
+// Hiển thị dashboard tổng quan (KPI, đơn hàng gần nhất)
 function renderDashboard() {
-    // KPIs
-    const totalOrders = (DB.orders || []).length;
-    const totalReceived = (DB.lohang || []).reduce((s,b)=>s+(parseFloat(b.soLuong)||0),0);
-    const stock = totalReceived;
-    const qualityAlerts = (DB.kiemDinh || []).filter(k => { const v = String(k.ketQua||'').toLowerCase(); return v.includes('không') || v.includes('khong') || v.includes('fail') || v.includes('chua'); }).length;
-
-    const kOrders = document.getElementById('kpi-orders'); if (kOrders) kOrders.textContent = totalOrders;
-    const kReceived = document.getElementById('kpi-received'); if (kReceived) kReceived.textContent = totalReceived;
-    const kStock = document.getElementById('kpi-stock'); if (kStock) kStock.textContent = stock;
-    const kQuality = document.getElementById('kpi-quality'); if (kQuality) kQuality.textContent = qualityAlerts;
-
-    // recent orders table
-    const tb = document.querySelector('#table-orders tbody');
-    if (tb) {
-        tb.innerHTML = '';
-        const recent = (DB.orders || []).slice().reverse().slice(0,10);
-        recent.forEach(o => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${o.maPhieu||o.uid||o.uid||o.maPhieu||o.id||''}</td><td>${o.maLo||''} — ${o.sanPham||''}</td><td>${o.soLuong||o.quantity||0}</td><td>${o.toDaily||o.toDailyAgency||o.to||''}</td><td>${o.ngayTao||o.ngayNhap||o.date||''}</td><td>${o.status||''}</td>`;
-            tb.appendChild(tr);
-        });
-    }
+    const totalOrders = (DB.orders||[]).length, totalReceived = (DB.lohang||[]).reduce((s,b)=>s+(+b.soLuong||0),0),
+        qualityAlerts = (DB.kiemDinh||[]).filter(k=>/kh(ô|o)ng|fail|chua/i.test(k.ketQua||'')).length;
+    [['kpi-orders',totalOrders],['kpi-received',totalReceived],['kpi-stock',totalReceived],['kpi-quality',qualityAlerts]].forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.textContent=v});
+    const tb=document.querySelector('#table-orders tbody');
+    if(tb)tb.innerHTML=(DB.orders||[]).slice(-10).reverse().map(o=>`<tr><td>${o.maPhieu||o.uid||o.id||''}</td><td>${o.maLo||''} — ${o.sanPham||''}</td><td>${o.soLuong||o.quantity||0}</td><td>${o.toDaily||o.toDailyAgency||o.to||''}</td><td>${o.ngayTao||o.ngayNhap||o.date||''}</td><td>${o.status||''}</td></tr>`).join('');
 }
 
+// Hiển thị danh sách đơn hàng
 function renderOrders() {
-    renderTable('#table-orders-all', DB.orders || [], o => `
-        <td>${o.maPhieu}</td><td>${o.maLo || ''}</td><td>${o.sanPham}</td><td>${o.soLuong}</td><td>${o.toDaily || o.toDailyAgency || ''}</td><td>${o.ngayTao || ''}</td><td>${o.status || ''}</td>
-        <td>
-            <button class="btn small" onclick="editOrder('${o.uid}')">Sửa</button>
-            <button class="btn small btn-danger" onclick="deleteOrder('${o.uid}')">Xóa</button>
-        </td>`);
+    renderTable('#table-orders-all', DB.orders||[], o => `
+        <td>${o.maPhieu}</td><td>${o.maLo||''}</td><td>${o.sanPham}</td><td>${o.soLuong}</td><td>${o.toDaily||o.toDailyAgency||''}</td><td>${o.ngayTao||''}</td><td>${o.status||''}</td>
+        <td><button class="btn small" onclick="editOrder('${o.uid}')">Sửa</button><button class="btn small btn-danger" onclick="deleteOrder('${o.uid}')">Xóa</button></td>`);
+}
 // Sửa đơn hàng
-window.editOrder = function(uid) {
-    const o = (DB.orders || []).find(x => x.uid === uid);
+window.editOrder = uid => {
+    const o = (DB.orders||[]).find(x=>x.uid===uid);
     if (!o) return;
     openModal(`<h3>Sửa đơn hàng</h3>
         <label>Mã lô</label><input id="edit-maLo" value="${o.maLo}" />
@@ -123,37 +59,37 @@ window.editOrder = function(uid) {
         <label>Kho nhận</label><input id="edit-kho" value="${o.khoNhap||''}" />
         <div style="margin-top:8px"><button onclick="saveOrder('${uid}')">Lưu</button><button onclick="closeModal()">Hủy</button></div>`);
 };
-
-window.saveOrder = function(uid) {
-    const o = (DB.orders || []).find(x => x.uid === uid);
+// Lưu đơn hàng sau khi sửa
+window.saveOrder = uid => {
+    const o = (DB.orders||[]).find(x=>x.uid===uid);
     if (!o) return;
     o.maLo = document.getElementById('edit-maLo').value;
     o.sanPham = document.getElementById('edit-sanPham').value;
-    o.soLuong = parseFloat(document.getElementById('edit-soLuong').value)||0;
+    o.soLuong = +document.getElementById('edit-soLuong').value||0;
     o.khoNhap = document.getElementById('edit-kho').value;
     saveDB(); renderAll(); closeModal();
 };
-
 // Xóa đơn hàng
-window.deleteOrder = function(uid) {
+window.deleteOrder = uid => {
     if (!confirm('Xóa đơn hàng này?')) return;
-    DB.orders = (DB.orders || []).filter(x => x.uid !== uid);
+    DB.orders = (DB.orders||[]).filter(x=>x.uid!==uid);
     saveDB(); renderAll();
 };
-}
 
 
 
+// Hiển thị các đơn hàng nhập về từ Siêu thị
 function renderIncoming() {
     try {
-        const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-        const mine = all.filter(m => String(m.fromSieuthiId) === String(currentUser?.id) && String(m.status).toLowerCase() === 'shipped');
-        renderTable('#table-incoming', mine, m => `
+        const all = JSON.parse(localStorage.getItem('retail_orders')||'[]')||[],
+            mine = all.filter(m=>String(m.fromSieuthiId)===String(currentUser?.id)&&String(m.status).toLowerCase()==='shipped');
+        renderTable('#table-incoming', mine, m=>`
             <td>${m.maPhieu}</td><td>${m.maLo} — ${m.sanPham||''}</td><td>${m.soLuong}</td><td>${m.toDaily||m.toDailyAgency||m.toSieuthi||''}</td><td>${m.ngayTao||''}</td><td>${m.status||''}</td>
             <td>${m.status==='shipped'?`<button class=\"btn-edit\" onclick=\"markRetailOrderReceived('${m.uid}')\">Đã nhận</button>`:''}</td>`);
-    } catch (e) { console.warn(e); }
+    } catch(e){console.warn(e);}
 }
 
+// Đánh dấu đã nhận đơn hàng bán lẻ
 function markRetailOrderReceived(uid) {
     const all = JSON.parse(localStorage.getItem('retail_orders') || '[]');
     const idx = all.findIndex(x => x.uid === uid);
@@ -167,6 +103,7 @@ function markRetailOrderReceived(uid) {
     renderAll();
 }
 
+// Hủy đơn hàng
 function cancelOrder(uid) {
     DB.orders = DB.orders || [];
     const idx = DB.orders.findIndex(o => o.uid === uid);
@@ -177,42 +114,29 @@ function cancelOrder(uid) {
     renderAll();
 }
 
+// Hiển thị báo cáo thống kê
 function renderReports() {
-    // Tổng đơn hàng: số đơn siêu thị tạo
-    const totalOrders = (DB.orders || []).length;
-    // Tồn kho: tổng số sản phẩm trong kho
-    const stock = (DB.lohang || []).reduce((s,b)=>s+(parseFloat(b.soLuong)||0),0);
-
-    const elTotalOrders = document.getElementById('report-production');
-    if (elTotalOrders) elTotalOrders.textContent = totalOrders + ' đơn';
-    const elStock = document.getElementById('report-stock');
-    if (elStock) elStock.textContent = stock + ' sản phẩm';
-    // Ẩn các chỉ số không dùng
-    const elReceived = document.getElementById('report-received');
-    if (elReceived) elReceived.textContent = '';
-    const elQuality = document.getElementById('report-quality');
-    if (elQuality) elQuality.textContent = '';
+    const totalOrders = (DB.orders||[]).length,
+        stock = (DB.lohang||[]).reduce((s,b)=>s+(+b.soLuong||0),0);
+    [['report-production',totalOrders+' đơn'],['report-stock',stock+' sản phẩm'],['report-received',''],['report-quality','']].forEach(([id,v])=>{const e=document.getElementById(id);if(e)e.textContent=v});
 }
 
+// Hiển thị tồn kho
 function renderInventory() {
-    renderTable('#table-inventory', DB.lohang || [], b => `
-        <td>${b.maLo}</td><td>${b.sanPham||''}</td><td>${b.soLuong||0}</td><td>${b.ngayTao||''}</td>
-        <td>
-            <button class="btn-edit" onclick="editBatch('${b.maLo}')">Sửa</button>
-            <button class="btn-delete" onclick="deleteBatch('${b.maLo}')">Xóa</button>
-        </td>`);
+  renderTable('#table-inventory', DB.lohang||[], b=>`
+    <td>${b.maLo}</td><td>${b.sanPham||''}</td><td>${b.soLuong||0}</td><td>${b.ngayTao||''}</td>
+    <td><button class="btn-edit" onclick="editBatch('${b.maLo}')">Sửa</button><button class="btn-delete" onclick="deleteBatch('${b.maLo}')">Xóa</button></td>`);
 }
 
 
 
-// Modal
-function openModal(html) { modalBody.innerHTML = html; modal.classList.remove('hidden'); }
-function closeModal() { modal.classList.add('hidden'); modalBody.innerHTML = ''; }
-
+// ====== MODAL: MỞ VÀ ĐÓNG POPUP ======
+const openModal = html => { modalBody.innerHTML = html; modal.classList.remove('hidden'); };
+const closeModal = () => { modal.classList.add('hidden'); modalBody.innerHTML = ''; };
 document.querySelector('.modal-close')?.addEventListener('click', closeModal);
 modal.addEventListener('click', e => e.target === modal && closeModal());
 
-// Quality modal
+// Modal tạo phiếu kiểm định chất lượng
 document.getElementById('btn-create-quality')?.addEventListener('click', ()=>{
     openModal(`<h3>Thêm phiếu kiểm định</h3>
         <label>Mã kiểm định</label><input id="q_ma" />
@@ -224,16 +148,21 @@ document.getElementById('btn-create-quality')?.addEventListener('click', ()=>{
         <div style="margin-top:12px"><button onclick="addQuality()">Lưu</button><button onclick="closeModal()">Hủy</button></div>`);
 });
 
+// Thêm phiếu kiểm định mới
 window.addQuality = function() {
-    const q = { maKiemDinh: document.getElementById('q_ma').value || 'KD' + Date.now(), maLo: document.getElementById('q_lo').value, ngayKiem: document.getElementById('q_ngay').value || new Date().toLocaleDateString(), nguoiKiem: document.getElementById('q_nguoi').value, ketQua: document.getElementById('q_ket').value, ghiChu: document.getElementById('q_gc').value };
-    DB.kiemDinh = DB.kiemDinh || [];
-    DB.kiemDinh.push(q);
-    saveDB();
-    renderReports();
-    closeModal();
+    const $ = id => document.getElementById(id), q = {
+        maKiemDinh: $('q_ma').value || 'KD'+Date.now(),
+        maLo: $('q_lo').value,
+        ngayKiem: $('q_ngay').value || new Date().toLocaleDateString(),
+        nguoiKiem: $('q_nguoi').value,
+        ketQua: $('q_ket').value,
+        ghiChu: $('q_gc').value
+    };
+    (DB.kiemDinh=DB.kiemDinh||[]).push(q);
+    saveDB(); renderReports(); closeModal();
 };
 
-// Create Order - simplified modal and handlers for new supermarket app
+// Modal tạo đơn hàng mới và xử lý
 document.getElementById('btn-create-order')?.addEventListener('click', () => {
     openModal(`<h3>Đơn đặt hàng mới</h3>
         <label>Mã lô</label><input id="input-maLo" placeholder="ML..." />
@@ -249,8 +178,9 @@ document.getElementById('btn-create-order')?.addEventListener('click', () => {
     populateOrderModalSelects();
 });
 
+// Đổ dữ liệu vào các select trong modal tạo đơn hàng
 function populateOrderModalSelects() {
-    // fill products from lohang
+    // Đổ danh sách sản phẩm từ lô hàng
     const sel = document.getElementById('select-sanpham');
     const skl = document.getElementById('select-kho');
     const sDaily = document.getElementById('select-daily');
@@ -263,11 +193,11 @@ function populateOrderModalSelects() {
         skl.innerHTML = '<option value="">--Chọn kho--</option>' + khs.map(k=>`<option>${k}</option>`).join('');
     }
 
-    // populate daily agencies list (prefer registered users when possible)
+    // Đổ danh sách đại lý (ưu tiên user đã đăng ký)
     try {
         const list = JSON.parse(localStorage.getItem('dailyAgencies') || '[]') || [];
         let users = JSON.parse(localStorage.getItem('users') || '[]') || [];
-        // If no registered users present (app may have not run login initializer), provide lightweight defaults so display uses expected fullName
+        // Nếu chưa có user đăng ký, tạo dữ liệu mẫu để hiển thị
         if (!Array.isArray(users) || users.length === 0) {
             users = [
                 { id: 4, role: 'daily', username: 'daily1', fullName: 'Đại lý 1', maDaiLy: 'DL001' },
@@ -276,7 +206,7 @@ function populateOrderModalSelects() {
         }
         if (sDaily) {
             sDaily.innerHTML = '<option value="">-- Chọn đại lý --</option>';
-            // Prefer registered users with role 'daily' to build list (show their fullName)
+            // Ưu tiên user có role 'daily' để hiển thị tên đầy đủ
             const dailiesFromUsers = users.filter(u => (u.role || '').toString().toLowerCase().includes('daily'));
             const usedMa = new Set();
             if (dailiesFromUsers.length) {
@@ -286,7 +216,7 @@ function populateOrderModalSelects() {
                     return `<option value="${val}" data-userid="${u.id}">${u.fullName || u.hoTen || u.username || u.id} (${u.maDaiLy || u.id})</option>`;
                 }).join('');
             }
-            // Append any agencies from dailyAgencies that are not represented by users
+            // Bổ sung các đại lý từ dailyAgencies chưa có trong users
             if (Array.isArray(list) && list.length) {
                 list.forEach(a => {
                     if (usedMa.has(String(a.maDaiLy))) return;
@@ -297,13 +227,13 @@ function populateOrderModalSelects() {
         }
     } catch (e) { console.warn('populate daily failed', e); }
 
-    // when daily selected, filter products to those related to that daily (try per-user kho or phieuNhap, fallback to shared lohang)
+    // Khi chọn đại lý, lọc sản phẩm liên quan đến đại lý đó (ưu tiên kho/phieuNhap của user, nếu không có thì lấy chung)
     if (sDaily) {
         sDaily.addEventListener('change', () => {
             const val = sDaily.value;
             let products = [];
             try {
-                // try per-user kho items by daily user id stored in option data-userid
+                // Thử lấy sản phẩm từ kho/phieuNhap của user đại lý
                 const opt = sDaily.options[sDaily.selectedIndex];
                 const userId = opt?.dataset?.userid;
                 if (userId) {
@@ -315,7 +245,7 @@ function populateOrderModalSelects() {
                     if (Array.isArray(pnh) && pnh.length) pnh.forEach(r => r.sanPham && products.push(r.sanPham));
                 }
             } catch(e){ /* ignore */ }
-            // fallback: shared lohang
+            // Nếu không có thì lấy từ lô hàng chung
             if (products.length === 0) {
                 try { products = (JSON.parse(localStorage.getItem('lohang')||'[]')||[]).filter(l => l.sanPham).map(l=>l.sanPham); } catch(e){ products = []; }
             }
@@ -328,30 +258,24 @@ function populateOrderModalSelects() {
     }
 }
 
+// Thêm mới một phiếu nhập hàng
 window.addPhieu = function() {
-    const maLo = document.getElementById('input-maLo')?.value;
-    const soLuong = document.getElementById('input-soLuong')?.value;
-    const sanPham = document.getElementById('select-sanpham')?.value;
-    const kho = document.getElementById('select-kho')?.value;
-    const selDaily = document.getElementById('select-daily');
-    const toDailyAgency = selDaily?.value || '';
-    const toDailyUserId = selDaily?.selectedOptions?.[0]?.dataset?.userid || '';
-    if (!maLo || !soLuong || !sanPham) { alert('Vui lòng nhập đầy đủ Mã lô, sản phẩm và số lượng'); return; }
-    const uid = 'R' + Date.now();
-    const p = { uid, maPhieu: uid, maLo, sanPham, soLuong: parseFloat(soLuong)||0, khoNhap: kho, toDailyAgency, toDailyUserId, toDaily: selDaily?.selectedOptions?.[0]?.text || '', fromSieuthiId: currentUser?.id, status: 'pending', ngayTao: new Date().toLocaleString() };
-    DB.orders = DB.orders || [];
-    DB.orders.push(p);
-    saveDB();
-    // broadcast to retail_orders channel
-    const retail = JSON.parse(localStorage.getItem('retail_orders') || '[]');
-    retail.push(Object.assign({}, p));
-    localStorage.setItem('retail_orders', JSON.stringify(retail));
-    renderAll();
-    closeModal();
+    const $ = id => document.getElementById(id),
+        maLo = $('input-maLo')?.value, soLuong = $('input-soLuong')?.value,
+        sanPham = $('select-sanpham')?.value, kho = $('select-kho')?.value,
+        selDaily = $('select-daily'),
+        toDailyAgency = selDaily?.value||'',
+        toDailyUserId = selDaily?.selectedOptions?.[0]?.dataset?.userid||'';
+    if (!maLo||!soLuong||!sanPham) return alert('Vui lòng nhập đầy đủ Mã lô, sản phẩm và số lượng');
+    const uid = 'R'+Date.now(), p = { uid, maPhieu: uid, maLo, sanPham, soLuong: +soLuong||0, khoNhap: kho, toDailyAgency, toDailyUserId, toDaily: selDaily?.selectedOptions?.[0]?.text||'', fromSieuthiId: currentUser?.id, status: 'pending', ngayTao: new Date().toLocaleString() };
+    (DB.orders=DB.orders||[]).push(p); saveDB();
+    const retail = JSON.parse(localStorage.getItem('retail_orders')||'[]');
+    retail.push({...p}); localStorage.setItem('retail_orders',JSON.stringify(retail));
+    renderAll(); closeModal();
 };
 
-// Batch edit/delete simple handlers
-window.editBatch = function(maLo) {
+// Sửa lô hàng
+window.editBatch = maLo => {
     const b = (DB.lohang||[]).find(x=>x.maLo===maLo);
     if (!b) return;
     openModal(`<h3>Sửa lô</h3>
@@ -360,23 +284,23 @@ window.editBatch = function(maLo) {
         <label>Số lượng</label><input id="bl_sl" type="number" value="${b.soLuong||0}" />
         <div style="margin-top:8px"><button onclick="saveBatch('${maLo}')">Lưu</button><button onclick="closeModal()">Hủy</button></div>`);
 };
-
-window.saveBatch = function(oldMaLo) {
+// Lưu lô hàng sau khi sửa
+window.saveBatch = oldMaLo => {
     const b = (DB.lohang||[]).find(x=>x.maLo===oldMaLo);
     if (!b) return;
     b.maLo = document.getElementById('bl_maLo').value;
     b.sanPham = document.getElementById('bl_sp').value;
-    b.soLuong = parseFloat(document.getElementById('bl_sl').value)||0;
+    b.soLuong = +document.getElementById('bl_sl').value||0;
     saveDB(); renderAll(); closeModal();
 };
-
-window.deleteBatch = function(maLo) {
+// Xóa lô hàng
+window.deleteBatch = maLo => {
     if (!confirm('Xóa lô hàng?')) return;
     DB.lohang = (DB.lohang||[]).filter(x=>x.maLo!==maLo);
     saveDB(); renderAll();
 };
 
-// Menu navigation - FIX: use [data-section] selector like Nongdan & Daily
+// ====== ĐIỀU HƯỚNG MENU - sử dụng [data-section] giống Nongdan & Daily ======
 document.querySelectorAll('.menu-link[data-section]').forEach(link => {
     link.addEventListener('click', (e) => {
         e.preventDefault();
@@ -388,7 +312,7 @@ document.querySelectorAll('.menu-link[data-section]').forEach(link => {
     });
 });
 
-// Init - Must call refreshAll() like Daily & Nongdan
+// ====== KHỞI TẠO - phải gọi refreshAll() giống Daily & Nongdan ======
 window.addEventListener('DOMContentLoaded', () => {
     loadCurrentUser();
     loadDB();
@@ -398,7 +322,7 @@ window.addEventListener('DOMContentLoaded', () => {
         user.style.cursor = 'pointer';
         user.title = 'Xem thông tin cá nhân';
         user.addEventListener('click', function() {
-            // Fake data cho siêu thị
+            // Dữ liệu mẫu cho siêu thị
             const fakeUser = {
                 fullName: 'Lê Văn C',
                 username: 'sieuthi789',
@@ -441,7 +365,7 @@ window.addEventListener('DOMContentLoaded', () => {
             `);
         });
     }
-    // Modal hiển thị thông tin user
+    // Modal hiển thị thông tin người dùng (popup)
     function showUserInfoModal(html) {
         let modal = document.getElementById('modal-user-info');
         if (!modal) {
@@ -467,12 +391,12 @@ window.addEventListener('DOMContentLoaded', () => {
     refreshAll();
 });
 
-// Refresh all data & renders (like Daily & Nongdan)
+// Làm mới toàn bộ dữ liệu và giao diện (giống Daily & Nongdan)
 function refreshAll() {
     renderAll();
 }
 
-// Listen for storage changes (from other tabs/windows) to refresh views
+// Lắng nghe sự kiện thay đổi storage (từ tab khác) để tự động làm mới giao diện
 window.addEventListener('storage', (ev) => {
     try {
         if (!ev.key) return;

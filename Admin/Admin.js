@@ -1,85 +1,33 @@
-// ========== DATA AGGREGATION FROM ALL APPS ==========
-function getAllUsers() {
-    // Lấy từ localStorage của các app
-    let users = [];
-    try {
-        const nd = JSON.parse(localStorage.getItem('users') || '[]');
-        users = users.concat(nd);
-    } catch(e){}
-    try {
-        const dl = JSON.parse(localStorage.getItem('dailyAgencies') || '[]');
-        users = users.concat(dl);
-    } catch(e){}
-    try {
-        const st = JSON.parse(localStorage.getItem('sieuthiAgencies') || '[]');
-        users = users.concat(st);
-    } catch(e){}
-    return users;
-}
+// ========== TỔNG HỢP DỮ LIỆU TỪ TẤT CẢ ỨNG DỤNG ========== 
+const getAll = k => { try { return JSON.parse(localStorage.getItem(k)||'[]'); } catch(e){ return []; } };
+const getAllUsers = () => [...getAll('users'),...getAll('dailyAgencies'),...getAll('sieuthiAgencies')];
+const getAllBatches = () => getAll('lohang');
+const getAllOrders = () => [...getAll('market_orders'),...getAll('retail_orders')];
 
-function getAllBatches() {
-    let batches = [];
-    try {
-        batches = batches.concat(JSON.parse(localStorage.getItem('lohang') || '[]'));
-    } catch(e){}
-    return batches;
-}
-
-function getAllOrders() {
-    let orders = [];
-    try {
-        orders = orders.concat(JSON.parse(localStorage.getItem('market_orders') || '[]'));
-    } catch(e){}
-    try {
-        orders = orders.concat(JSON.parse(localStorage.getItem('retail_orders') || '[]'));
-    } catch(e){}
-    return orders;
-}
-
-// ========== RENDER TO ADMIN UI ==========
+// ========== HIỂN THỊ DỮ LIỆU LÊN GIAO DIỆN ADMIN ========== 
 function renderAdminUsers() {
-    const users = getAllUsers();
-    const tb = document.getElementById('table-admin-users');
+    const users = getAllUsers(), tb = document.getElementById('table-admin-users');
     if (!tb) return;
-    tb.innerHTML = '';
-    users.forEach(u => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${u.id||u.maDaiLy||u.maNong||''}</td><td>${u.fullName||u.tenDaiLy||u.tenNong||u.username||''}</td><td>${u.role||u.loai||''}</td>`;
-        tb.appendChild(tr);
-    });
+    tb.innerHTML = users.map(u=>`<tr><td>${u.id||u.maDaiLy||u.maNong||''}</td><td>${u.fullName||u.tenDaiLy||u.tenNong||u.username||''}</td><td>${u.role||u.loai||''}</td></tr>`).join('');
 }
-
 function renderAdminBatches() {
-    const batches = getAllBatches();
-    const tb = document.getElementById('table-admin-batches');
+    const batches = getAllBatches(), tb = document.getElementById('table-admin-batches');
     if (!tb) return;
-    tb.innerHTML = '';
-    batches.forEach(b => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${b.maLo}</td><td>${b.sanPham}</td><td>${b.soLuong}</td><td>${b.ngayTao||''}</td>`;
-        tb.appendChild(tr);
-    });
+    tb.innerHTML = batches.map(b=>`<tr><td>${b.maLo}</td><td>${b.sanPham}</td><td>${b.soLuong}</td><td>${b.ngayTao||''}</td></tr>`).join('');
 }
-
 function renderAdminOrders() {
-    const orders = getAllOrders();
-    const tb = document.getElementById('table-admin-orders');
+    const orders = getAllOrders(), tb = document.getElementById('table-admin-orders');
     if (!tb) return;
-    tb.innerHTML = '';
-    orders.forEach(o => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${o.maPhieu||o.uid||''}</td><td>${o.maLo||''}</td><td>${o.sanPham||''}</td><td>${o.soLuong||''}</td><td>${o.status||''}</td>`;
-        tb.appendChild(tr);
-    });
+    tb.innerHTML = orders.map(o=>`<tr><td>${o.maPhieu||o.uid||''}</td><td>${o.maLo||''}</td><td>${o.sanPham||''}</td><td>${o.soLuong||''}</td><td>${o.status||''}</td></tr>`).join('');
 }
 
-// Gọi các hàm render khi chuyển tab
+// Gọi các hàm render khi chuyển tab giao diện
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('[data-section="users"]')?.addEventListener('click', renderAdminUsers);
     document.querySelector('[data-section="batches"]')?.addEventListener('click', renderAdminBatches);
     document.querySelector('[data-section="orders"]')?.addEventListener('click', renderAdminOrders);
 });
-// ========== INITIALIZATION & HELPERS ==========
+// ========== KHỞI TẠO & HÀM HỖ TRỢ ========== 
 let currentUser = null;
 
 function loadCurrentUser() {
@@ -92,7 +40,7 @@ function loadCurrentUser() {
     return currentUser;
 }
 
-// Global database for Admin (centralized, not per-user)
+// Cơ sở dữ liệu toàn cục cho Admin (tập trung, không chia theo từng người dùng)
 const DB = {
     users: [],
     farms: [],
@@ -117,33 +65,33 @@ function saveDB() {
     localStorage.setItem('admin_logs', JSON.stringify(DB.logs));
 }
 
-// ========== UI NAVIGATION ==========
+// ========== ĐIỀU HƯỚNG GIAO DIỆN ========== 
 document.addEventListener('DOMContentLoaded', () => {
     loadCurrentUser();
     loadDB();
 
-    // --- Đồng bộ dữ liệu từ các actor vào DB admin ---
-    // Lấy users từ localStorage các actor
+    // --- Đồng bộ dữ liệu từ các vai trò vào DB admin ---
+    // Lấy danh sách người dùng từ localStorage của các vai trò
     try {
         const nd = JSON.parse(localStorage.getItem('users') || '[]');
         const dl = JSON.parse(localStorage.getItem('dailyAgencies') || '[]');
         const st = JSON.parse(localStorage.getItem('sieuthiAgencies') || '[]');
         DB.users = [...nd, ...dl, ...st];
     } catch(e){}
-    // Lấy batches (lô hàng)
+    // Lấy danh sách lô hàng (batches)
     try {
         DB.batches = JSON.parse(localStorage.getItem('lohang') || '[]');
     } catch(e){}
-    // Lấy orders
+    // Lấy danh sách đơn hàng (orders)
     try {
         const marketOrders = JSON.parse(localStorage.getItem('market_orders') || '[]');
         const retailOrders = JSON.parse(localStorage.getItem('retail_orders') || '[]');
         DB.orders = [...marketOrders, ...retailOrders];
     } catch(e){}
-    // Lưu lại vào localStorage admin
+    // Lưu lại dữ liệu vào localStorage của admin
     saveDB();
 
-    // Display current user
+    // Hiển thị thông tin người dùng hiện tại
     if (currentUser?.fullName) {
         const userDisplay = document.getElementById('current-user');
         if (userDisplay) {
@@ -151,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
             userDisplay.style.cursor = 'pointer';
             userDisplay.title = 'Xem thông tin cá nhân';
             userDisplay.addEventListener('click', function() {
-                // Fake data cho admin
+                // Dữ liệu mẫu cho admin
                 const fakeUser = {
                     fullName: 'Admin Hệ thống',
                     username: 'adminsys',
@@ -181,7 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-        // Modal hiển thị thông tin user
+        // Modal hiển thị thông tin người dùng
         function showUserInfoModal(html) {
             let modal = document.getElementById('modal-user-info');
             if (!modal) {
@@ -204,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('close-user-info-modal').onclick = () => { modal.style.display = 'none'; };
             modal.onclick = (e) => { if (e.target === modal) modal.style.display = 'none'; };
         }
-    // Display current role (make it friendly)
+    // Hiển thị vai trò hiện tại (dạng thân thiện)
     if (currentUser?.role) {
         const roleDisplay = document.getElementById('current-role');
         if (roleDisplay) roleDisplay.textContent = (currentUser.role || '').toString().replace(/(^|_)([a-z])/g, (_, a, b) => b ? b.toUpperCase() : '').replace(/_/g, ' ');
@@ -233,13 +181,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Logo goes to dashboard
+    // Nhấn logo sẽ về trang tổng quan (dashboard)
     document.querySelectorAll('.logo').forEach(l => l.addEventListener('click', (e) => { e.preventDefault(); location.hash = 'dashboard'; }));
 
-    // Header action: new report -> open reports section
+    // Nhấn nút tạo báo cáo mới sẽ chuyển sang tab báo cáo
     document.getElementById('btn-new-report')?.addEventListener('click', () => { location.hash = 'reports'; });
 
-    // ========== MODAL HELPERS ==========
+    // ========== HỖ TRỢ MODAL ========== 
     function openModal(templateId) {
         const tpl = document.getElementById(templateId);
         if (!tpl) return;
@@ -272,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
     window.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-    // ========== FORM SUBMISSION ==========
+    // ========== XỬ LÝ GỬI FORM ========== 
     function handleFormSubmit(formId, formData) {
         const data = Object.fromEntries(formData);
         
@@ -285,7 +233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshAll();
     }
 
-    // ========== DATA OPERATIONS ==========
+    // ========== CÁC HÀNH ĐỘNG DỮ LIỆU ========== 
     function addUser(data) {
         const user = {
             id: 'user_' + Date.now(),
@@ -326,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderOrders();
     }
 
-    // ========== RENDERING FUNCTIONS ==========
+    // ========== CÁC HÀM HIỂN THỊ ========== 
     function renderKPIs() {
         document.getElementById('kpi-total-users').textContent = DB.users.length;
         document.getElementById('kpi-total-farms').textContent = DB.farms.length;
@@ -401,7 +349,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderLogs();
     }
 
-    // ========== BUTTON HANDLERS ==========
+    // ========== XỬ LÝ SỰ KIỆN NÚT BẤM ========== 
     document.getElementById('btn-add-admin-user')?.addEventListener('click', () => openModal('add-user-template'));
     document.getElementById('btn-add-farm')?.addEventListener('click', () => openModal('add-farm-template'));
     
@@ -426,10 +374,10 @@ document.addEventListener('DOMContentLoaded', () => {
         refreshAll();
     });
 
-    // ========== INITIAL RENDER ==========
+    // ========== HIỂN THỊ BAN ĐẦU ========== 
     refreshAll();
 
-    // Make functions globally accessible for inline handlers
+    // Đưa các hàm ra global để gọi từ HTML (onclick)
     window.deleteFarm = deleteFarm;
     window.deleteUser = deleteUser;
     window.deleteOrder = deleteOrder;
