@@ -1,10 +1,9 @@
-// ====== HÀM HỖ TRỢ LOCALSTORAGE (Dữ liệu riêng từng người dùng) ======
 let currentUser = null;
 
 function loadCurrentUser() {
     const stored = sessionStorage.getItem('currentUser');
     if (!stored) {
-        // Chuyển hướng về trang đăng nhập nếu chưa đăng nhập
+        // redirect to login if no user session
         window.location.href = '/Dangnhap/Dangnhap.html';
         return null;
     }
@@ -30,11 +29,11 @@ function saveUserData(key, data) {
 }
 
 function loadDailyKhos() {
-    // Tải danh sách kho từ đại lý (dùng chung, không riêng từng người dùng)
+    // Load kho list from daily (shared storage, not user-specific)
     return JSON.parse(localStorage.getItem('kho') || '[]');
 }
 
-// Hàm chuẩn hóa trạng thái và hiển thị trạng thái
+// Status helpers: normalize and display
 function mapStatusToCode(s) {
     if (!s && s !== '') return '';
     const v = String(s || '').trim().toLowerCase();
@@ -61,7 +60,7 @@ function statusDisplay(codeOrRaw) {
     }
 }
 
-// ====== CẤU TRÚC DỮ LIỆU (Dùng cho Nông dân) ======
+// Per-user database structure
 const DB = {
     farms: [],
     batches: [],
@@ -72,7 +71,7 @@ function loadDB() {
     DB.farms = loadUserData('farms');
     DB.batches = loadUserData('batches');
     DB.orders = loadUserData('orders');
-    // Tải các đơn hàng thị trường gửi đến nông dân (dùng chung)
+    // load market orders targeted to this farmer (shared global)
     try {
         const allMarket = JSON.parse(localStorage.getItem('market_orders') || '[]');
         DB.marketOrders = allMarket.filter(m => String(m.toFarmerUserId) === String(currentUser?.id));
@@ -85,10 +84,10 @@ function saveDB() {
     saveUserData('orders', DB.orders);
 }
 
-// ====== HIỂN THỊ KPI & GIAO DIỆN ======
+/* ---------- KPI & Rendering ---------- */
 
 function renderKPIs() {
-    // Không cập nhật lại tên ở đây để tránh lặp tên ở thanh bên
+    // Không set lại tên ở đây để tránh lặp tên ở sidebar
     document.getElementById('kpi-farms').textContent = DB.farms.length;
     document.getElementById('kpi-batches').textContent = DB.batches.length;
     document.getElementById('kpi-orders').textContent = DB.orders.length;
@@ -140,7 +139,7 @@ function renderKhoNhap() {
     const tbody = document.querySelector('#table-kho-nhap tbody');
     if (!tbody) return;
     tbody.innerHTML = '';
-    // Hiển thị các lô sản xuất của nông dân như tồn kho
+    // Display farmer's own production batches as their inventory
     DB.batches.forEach(b => {
         const tr = document.createElement('tr');
         const status = b.quantity > 0 ? 'Còn hàng' : 'Hết';
@@ -153,7 +152,7 @@ function renderKhoXuat() {
     const tbody = document.querySelector('#table-kho-xuat tbody');
     if (!tbody) return;
     tbody.innerHTML = '';
-    // Hiển thị các đơn hàng đã xuất của nông dân
+    // Display farmer's orders that have been shipped/exported
     const shipped = DB.orders.filter(o => o.status === 'completed');
     shipped.forEach(o => {
         const tr = document.createElement('tr');
@@ -201,7 +200,7 @@ window.confirmIncomingOrder = function(idKey) {
     const idx = all.findIndex(x => (String(x.uid) === String(idKey) || String(x.maPhieu) === String(idKey)) && String(x.toFarmerUserId) === String(currentUser?.id));
     console.debug('found index=', idx);
     if (idx === -1) return alert('Không tìm thấy đơn');
-    // Đánh dấu nông dân đã xác nhận đơn hàng (dùng mã chuẩn)
+    // mark that farmer accepted the order (use canonical code)
     all[idx].status = 'accepted';
     localStorage.setItem('market_orders', JSON.stringify(all));
     // reload local view
@@ -233,11 +232,11 @@ window.shipIncomingOrder = function(idKey) {
         return alert('Không tìm thấy đơn');
     }
     const ord = all[idx];
-    // Đánh dấu đã xuất đơn và chờ kiểm định (dùng mã chuẩn)
+    // mark as shipped and waiting for quality check (canonical)
     ord.status = 'shipped';
     ord.shipInfo = { ngayGui: date, note };
     localStorage.setItem('market_orders', JSON.stringify(all));
-    // Thông báo cho đại lý: tạo phiếu nhập và phiếu kiểm định
+    // Notify the target Daily: create a receipt (phieuNhap) and a kiemDinh entry
     try {
         const dailyId = ord.fromDailyUserId || ord.fromDaily || ord.toDailyUserId || ord.toDaily;
             if (dailyId) {
@@ -284,14 +283,14 @@ window.shipIncomingOrder = function(idKey) {
     // Decrease stock for the shipped batch both in per-user DB and shared lohang
     try {
         const shippedQty = parseFloat(ord.soLuong) || 0;
-        // 1) Giảm số lượng trong DB.batches của nông dân theo id lô
+        // 1) Try to reduce in per-user DB.batches by exact id match
         let reduced = false;
         let batch = DB.batches.find(b => String(b.id) === String(ord.maLo));
-        // 2) Nếu không có: tìm theo tên sản phẩm và đủ số lượng
+        // 2) Fallback: match by product name and sufficient quantity
         if (!batch) {
             batch = DB.batches.find(b => String(b.product) === String(ord.sanPham) && (parseFloat(b.quantity) || 0) >= shippedQty);
         }
-        // 3) Nếu vẫn không có: tìm theo tên sản phẩm bất kể số lượng
+        // 3) Another fallback: match by product name regardless of quantity
         if (!batch) {
             batch = DB.batches.find(b => String(b.product) === String(ord.sanPham));
         }
@@ -311,10 +310,10 @@ window.shipIncomingOrder = function(idKey) {
             lo.soLuong = Math.max(0, (parseFloat(lo.soLuong) || 0) - shippedQty);
             reduced = true;
         }
-        // Lưu thay đổi vào localStorage
+        // persist changes
         localStorage.setItem('lohang', JSON.stringify(allLohang));
         saveDB();
-        // Ghi nhận đơn hàng đã xuất vào DB.orders của nông dân
+        // record exported order into farmer's DB.orders
         try {
             const outId = 'O' + Date.now();
             DB.orders.push({ id: outId, batchId: ord.maLo || (batch && batch.id) || '', quantity: shippedQty, recipient: ord.fromDailyUserId || ord.to, kho: ord.khoNhap || '', date, status: 'completed' });
@@ -356,7 +355,7 @@ function getExpiryStatus(expiry) {
     return 'ok';
 }
 
-// ====== MODAL (HIỂN THỊ POPUP) ======
+/* ---------- Modal ---------- */
 
 function openModal(html) {
     document.getElementById('modal-body').innerHTML = html;
@@ -371,7 +370,7 @@ document.addEventListener('click', (e) => {
     if (e.target.matches('.modal-close')) closeModal();
 });
 
-// ====== QUẢN LÝ TRANG TRẠI (NÔNG DÂN) ======
+/* ---------- Farms Management ---------- */
 
 document.getElementById('btn-new-farm')?.addEventListener('click', () => {
     openModal(`
@@ -429,7 +428,7 @@ window.deleteFarm = function(id) {
     }
 };
 
-// ====== QUẢN LÝ LÔ SẢN PHẨM (NÔNG DÂN) ======
+/* ---------- Batches Management ---------- */
 
 document.querySelectorAll('#btn-new-batch').forEach(btn => btn.addEventListener('click', () => {
     const farmOptions = DB.farms.map(f => `<option value="${f.id}">${f.name}</option>`).join('');
@@ -507,7 +506,7 @@ window.deleteBatch = function(id) {
     }
 };
 
-// ====== QUẢN LÝ ĐƠN HÀNG (Nhận + Xuất) - NÔNG DÂN ======
+/* ---------- Orders Management (nhận đơn hàng + xuất hàng) ---------- */
 
 
 window.saveOrder = function(id = null) {
@@ -543,7 +542,7 @@ window.updateOrder = function(id) {
     renderReports();
 };
 
-// ====== ĐIỀU HƯỚNG GIAO DIỆN ======
+/* ---------- Navigation ---------- */
 
 document.querySelectorAll('.menu-link[data-section]').forEach(link => {
     link.addEventListener('click', (e) => {
@@ -556,7 +555,7 @@ document.querySelectorAll('.menu-link[data-section]').forEach(link => {
     });
 });
 
-// ====== KHỞI TẠO DỮ LIỆU & GIAO DIỆN ======
+/* ---------- Initialize ---------- */
 
 function refreshAll() {
     renderFarms();
@@ -573,12 +572,12 @@ window.addEventListener('DOMContentLoaded', () => {
     loadCurrentUser();
     loadDB();
     
-    // Hiển thị thông tin người dùng hiện tại (chỉ tên, không icon)
+    // Display current user info (chỉ tên, không icon)
     const userDisplay = document.getElementById('current-user');
     if (userDisplay && currentUser) {
         userDisplay.textContent = currentUser.fullName || 'Nông dân';
             userDisplay.addEventListener('click', function() {
-                // Dữ liệu mẫu dựa đúng trường đăng ký tài khoản
+                // Fake data dựa đúng trường đăng ký tài khoản
                 const fakeUser = {
                     fullName: 'Nguyễn Văn A',
                     username: 'nongdan123',
@@ -595,9 +594,9 @@ window.addEventListener('DOMContentLoaded', () => {
                     createdAt: '2025-12-01T09:00:00',
                     id: 'ND123456'
                 };
-                // Avatar SVG mẫu
+                // Avatar SVG
                 const avatar = `<div style="display:flex;justify-content:center;align-items:center;margin-bottom:16px;"><div style="background:linear-gradient(135deg,#4caf50,#388e3c);width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 12px #0002;"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"44\" height=\"44\" viewBox=\"0 0 24 24\" fill=\"#fff\"><path d=\"M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z\"/></svg></div></div>`;
-                // Bảng thông tin chi tiết
+                // Thông tin chi tiết
                 const infoTable = `
                     <table style=\"width:100%;border-collapse:separate;border-spacing:0 12px 0 18px;font-size:16px;\">
                         <colgroup><col style=\"width:180px;\"><col style=\"width:auto;\"></colgroup>
@@ -616,7 +615,7 @@ window.addEventListener('DOMContentLoaded', () => {
                         <tr><td style=\"color:#888;padding-right:32px;\">Ngày tạo tài khoản</td><td>${new Date(fakeUser.createdAt).toLocaleString('vi-VN')}</td></tr>
                         <tr><td style=\"color:#888;padding-right:32px;\">ID người dùng</td><td>${fakeUser.id}</td></tr>
                     </table>`;
-                // Hiển thị giao diện đẹp hơn cho modal thông tin
+                // Giao diện đẹp hơn
                 showUserInfoModal(`
                     ${avatar}
                     <div style=\"margin-bottom:12px;text-align:center;font-size:18px;font-weight:600;color:#388e3c;letter-spacing:0.5px;\">Thông tin cá nhân</div>
@@ -626,7 +625,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     
     refreshAll();
-    // Modal hiển thị thông tin người dùng (popup)
+    // Modal hiển thị thông tin user
     function showUserInfoModal(html) {
         let modal = document.getElementById('modal-user-info');
         if (!modal) {
